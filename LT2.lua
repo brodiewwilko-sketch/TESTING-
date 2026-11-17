@@ -31,6 +31,7 @@ if Existing then Existing:Destroy() end
 local ScreenGui
 local restoreCamera
 local flyToggleSetter
+local unloadHub
 
 local State = {
     runningTree = false,
@@ -51,6 +52,11 @@ local State = {
     cameraSaved = nil,
     oldCollisions = {},
     oldFog = nil,
+    alwaysNight = false,
+    noShadows = false,
+    fullBright = false,
+    rgbEnabled = true,
+    rgbSpeed = 55,
     closed = false,
 }
 
@@ -165,9 +171,19 @@ local MainCorner = Instance.new("UICorner")
 MainCorner.CornerRadius = UDim.new(0, 13)
 MainCorner.Parent = Main
 local MainStroke = Instance.new("UIStroke")
-MainStroke.Thickness = 1.5
-MainStroke.Color = Color3.fromRGB(75, 93, 150)
+MainStroke.Thickness = 1.7
+MainStroke.Color = Color3.fromRGB(130, 130, 255)
 MainStroke.Parent = Main
+local MainStrokeGradient = Instance.new("UIGradient")
+MainStrokeGradient.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 55, 135)),
+    ColorSequenceKeypoint.new(0.25, Color3.fromRGB(255, 185, 65)),
+    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(70, 235, 190)),
+    ColorSequenceKeypoint.new(0.75, Color3.fromRGB(75, 130, 255)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(195, 75, 255)),
+})
+MainStrokeGradient.Rotation = 25
+MainStrokeGradient.Parent = MainStroke
 
 local Top = Instance.new("Frame")
 Top.Name = "TopBar"
@@ -177,6 +193,10 @@ Top.BorderSizePixel = 0
 Top.Active = true
 Top.ZIndex = 10
 Top.Parent = Main
+local TopGradient = Instance.new("UIGradient")
+TopGradient.Color = ColorSequence.new(Color3.fromRGB(25, 29, 45), Color3.fromRGB(17, 19, 30))
+TopGradient.Rotation = 90
+TopGradient.Parent = Top
 local TopCorner = Instance.new("UICorner")
 TopCorner.CornerRadius = UDim.new(0, 13)
 TopCorner.Parent = Top
@@ -262,14 +282,15 @@ Sidebar.BackgroundColor3 = Color3.fromRGB(17, 20, 29)
 Sidebar.BorderSizePixel = 0
 Sidebar.Parent = Main
 Sidebar.ZIndex = 5
+Sidebar.ClipsDescendants = true
 local SideLayout = Instance.new("UIListLayout")
-SideLayout.Padding = UDim.new(0, 6)
+SideLayout.Padding = UDim.new(0, 5)
 SideLayout.SortOrder = Enum.SortOrder.LayoutOrder
 SideLayout.Parent = Sidebar
 local SidePadding = Instance.new("UIPadding")
-SidePadding.PaddingTop = UDim.new(0, 18)
-SidePadding.PaddingLeft = UDim.new(0, 10)
-SidePadding.PaddingRight = UDim.new(0, 10)
+SidePadding.PaddingTop = UDim.new(0, 12)
+SidePadding.PaddingLeft = UDim.new(0, 9)
+SidePadding.PaddingRight = UDim.new(0, 9)
 SidePadding.Parent = Sidebar
 
 local Content = Instance.new("Frame")
@@ -311,9 +332,10 @@ local function createPage(name)
     Pages[name] = scroll
     local tab = Instance.new("TextButton")
     tab.Name = name .. "Tab"
-    tab.Size = UDim2.new(1, 0, 0, 36)
+    tab.Size = UDim2.new(1, 0, 0, 34)
     tab.BackgroundColor3 = Color3.fromRGB(24, 28, 39)
     tab.BorderSizePixel = 0
+    tab.AutoButtonColor = false
     tab.Text = name
     tab.Font = Enum.Font.GothamSemibold
     tab.TextSize = 12
@@ -326,6 +348,11 @@ local function createPage(name)
     TabCount = TabCount + 1
     tab.LayoutOrder = TabCount
     Instance.new("UICorner", tab).CornerRadius = UDim.new(0, 8)
+    local tabStroke = Instance.new("UIStroke")
+    tabStroke.Color = Color3.fromRGB(56, 64, 91)
+    tabStroke.Transparency = 0.55
+    tabStroke.Thickness = 1
+    tabStroke.Parent = tab
     TabButtons[name] = tab
 
     local function selectThisPage()
@@ -340,7 +367,7 @@ local function createPage(name)
         ActiveTab = name
     end
 
-    tab.MouseButton1Click:Connect(selectThisPage)
+    tab.Activated:Connect(selectThisPage)
     if not ActiveTab then selectThisPage() end
     return scroll
 end
@@ -388,13 +415,24 @@ local function addButton(page, text, description, callback, accentColor)
     button.Size = UDim2.new(1, -4, 0, description and 58 or 42)
     button.Text = ""
     button.Parent = page
+    button.Active = true
+    button.Selectable = true
     Instance.new("UICorner", button).CornerRadius = UDim.new(0, 8)
+    local buttonStroke = Instance.new("UIStroke")
+    buttonStroke.Color = accentColor or Color3.fromRGB(84, 110, 210)
+    buttonStroke.Transparency = 0.72
+    buttonStroke.Thickness = 1
+    buttonStroke.Parent = button
     local line = Instance.new("Frame")
     line.Size = UDim2.new(0, 3, 1, -14)
     line.Position = UDim2.new(0, 0, 0, 7)
     line.BackgroundColor3 = accentColor or Color3.fromRGB(90, 122, 245)
     line.BorderSizePixel = 0
     line.Parent = button
+    local lineGradient = Instance.new("UIGradient")
+    lineGradient.Color = AccentGradient.Color
+    lineGradient.Rotation = 90
+    lineGradient.Parent = line
     Instance.new("UICorner", line).CornerRadius = UDim.new(1, 0)
     local title = Instance.new("TextLabel")
     title.BackgroundTransparency = 1
@@ -423,9 +461,9 @@ local function addButton(page, text, description, callback, accentColor)
         TweenService:Create(button, TweenInfo.new(0.12), {BackgroundColor3 = Color3.fromRGB(34, 40, 56)}):Play()
     end)
     button.MouseLeave:Connect(function()
-        TweenService:Create(button, TweenInfo.new(0.12), {BackgroundColor3 = Color3.fromRGB(24, 28, 39)}):Play()
+        TweenService:Create(button, TweenInfo.new(0.16), {BackgroundColor3 = Color3.fromRGB(24, 28, 39)}):Play()
     end)
-    button.MouseButton1Click:Connect(function()
+    button.Activated:Connect(function()
         if callback then
             task.spawn(function()
                 safeCall(text, callback)
@@ -474,7 +512,7 @@ local function addStepper(page, titleText, initial, minimum, maximum, onChange)
         b.TextColor3 = Color3.fromRGB(240, 243, 255)
         b.Parent = row
         Instance.new("UICorner", b).CornerRadius = UDim.new(0, 6)
-        b.MouseButton1Click:Connect(function()
+        b.Activated:Connect(function()
             value = math.clamp(value + delta, minimum, maximum)
             valueLabel.Text = tostring(value)
             if onChange then onChange(value) end
@@ -540,10 +578,10 @@ local function addToggle(page, titleText, initial, callback, description)
         if fireCallback and callback then callback(enabled) end
     end
     render()
-    toggle.MouseButton1Click:Connect(function()
+    toggle.Activated:Connect(function()
         setEnabled(not enabled, true)
     end)
-    return function() return enabled end, function(value) setEnabled(value, true) end
+    return function() return enabled end, function(value, fireCallback) setEnabled(value, fireCallback ~= false) end
 end
 
 local function addSelector(page, titleText, options, defaultValue, onChange)
@@ -595,7 +633,7 @@ local function addSelector(page, titleText, options, defaultValue, onChange)
         b.TextColor3 = Color3.fromRGB(240, 243, 255)
         b.Parent = row
         Instance.new("UICorner", b).CornerRadius = UDim.new(0, 6)
-        b.MouseButton1Click:Connect(function() change(i == 1 and -1 or 1) end)
+        b.Activated:Connect(function() change(i == 1 and -1 or 1) end)
     end
     if onChange then onChange(options[index]) end
     return function() return options[index] end, function(newOptions)
@@ -612,6 +650,8 @@ local TeleportPage = createPage("Teleports")
 local ViewerPage = createPage("Viewers")
 local PlayerPage = createPage("Player")
 local BuyPage = createPage("Blueprints")
+local ItemsPage = createPage("Items")
+local WorldPage = createPage("World")
 local SettingsPage = createPage("Settings")
 
 -- Draggable window
@@ -636,7 +676,7 @@ UserInputService.InputChanged:Connect(function(input)
     end
 end)
 
-Minimize.MouseButton1Click:Connect(function()
+Minimize.Activated:Connect(function()
     if State.closed then return end
     Sidebar.Visible = not Sidebar.Visible
     Content.Visible = Sidebar.Visible
@@ -690,7 +730,7 @@ local function teleportToBase()
 end
 
 addHeader(HomePage, "Welcome back")
-addInfo(HomePage, "LT2 Utility Hub is loaded. Use the tabs to access Bring Tree, cave viewers, teleports and sequential blueprint buying.", 56)
+addInfo(HomePage, "LT2 Utility Hub is loaded. Explore one-click Bring Tree, cave viewers, player/item teleports, blueprint buying, movement and local world controls.", 56)
 addButton(HomePage, "Save current position", "Stores the exact position for Bring Tree and manual return.", function()
     local _, _, root = getCharacter()
     if not root then return notify("Save position failed", "Character is not loaded.") end
@@ -703,7 +743,7 @@ addButton(HomePage, "Return to saved position", "Teleport back to the last saved
 end)
 addButton(HomePage, "Teleport to your base", "Finds your plot using its Owner value.", teleportToBase)
 addInfo(HomePage, "Menu: RightShift    •    Fly: Q    •    Fly movement: WASD + Space / Ctrl", 42)
-addInfo(HomePage, "Bring Tree requires an axe in hotbar slot 1 and a tree currently spawned in this server. Blueprint buying spends your in-game cash.", 56)
+addInfo(HomePage, "Bring Tree automatically finds a compatible axe in your Character/Backpack. Tree types shown in the list may not be spawned in this server. Blueprint buying spends your in-game cash.", 62)
 
 --// Teleports UI --------------------------------------------------------------
 addHeader(TeleportPage, "Main and hidden locations")
@@ -736,6 +776,20 @@ addButton(TeleportPage, "Teleport to Cavecrawler tree", "Only works when a blue 
     if not wood then return notify("Cavecrawler teleport failed", "No Cavecrawler tree is loaded in this server. Follow the current maze route.") end
     setCharacterCFrame(wood.CFrame * CFrame.new(-7, 3, 0))
 end, Color3.fromRGB(65, 175, 225))
+
+addHeader(TeleportPage, "Player shortcuts")
+addInfo(TeleportPage, "Teleport near an online player. This only moves your character; it does not affect their character or plot.", 48)
+local function addPlayerTeleport(player)
+    if not player or player == LocalPlayer then return end
+    addButton(TeleportPage, "Go to " .. player.Name, "Teleport near this player if their character is loaded.", function()
+        local targetCharacter = player.Character
+        local targetRoot = targetCharacter and targetCharacter:FindFirstChild("HumanoidRootPart")
+        if not targetRoot then return notify("Player teleport failed", player.Name .. " does not have a loaded character.") end
+        setCharacterCFrame(targetRoot.CFrame * CFrame.new(0, 0, 7))
+    end, Color3.fromRGB(83, 135, 220))
+end
+for _, player in ipairs(Players:GetPlayers()) do addPlayerTeleport(player) end
+Players.PlayerAdded:Connect(addPlayerTeleport)
 
 --// Camera viewers ------------------------------------------------------------
 restoreCamera = function()
@@ -855,29 +909,56 @@ end
 
 local function findAvailableTree(treeClass)
     local candidates = {}
-    for _, region in ipairs(getTreeRegions()) do
+    local regions = getTreeRegions()
+    if #regions == 0 then
+        return nil, "No TreeRegion folders are loaded in Workspace. The map may still be streaming; try Refresh or rejoin."
+    end
+
+    local matching, claimed, cut, malformed = 0, 0, 0, 0
+    for _, region in ipairs(regions) do
         for _, model in ipairs(region:GetChildren()) do
-            if model:IsA("Model") and model:FindFirstChild("CutEvent") and not model:FindFirstChild("RootCut") then
+            if model:IsA("Model") then
                 local classValue = model:FindFirstChild("TreeClass")
-                local owner = model:FindFirstChild("Owner")
-                if classValue and tostring(classValue.Value) == treeClass and owner and owner.Value == nil then
-                    local rootWood, sectionCount, totalMass = getTreeRootSection(model), 0, 0
-                    for _, part in ipairs(model:GetDescendants()) do
-                        if part:IsA("BasePart") and part.Name == "WoodSection" then
-                            sectionCount += 1
-                            totalMass += part.AssemblyMass
+                if classValue and tostring(classValue.Value) == treeClass then
+                    matching += 1
+                    local owner = model:FindFirstChild("Owner")
+                    if model:FindFirstChild("RootCut") then
+                        cut += 1
+                    elseif not model:FindFirstChild("CutEvent") or not owner then
+                        malformed += 1
+                    elseif owner.Value ~= nil then
+                        claimed += 1
+                    else
+                        local rootWood, sectionCount, totalMass = getTreeRootSection(model), 0, 0
+                        for _, part in ipairs(model:GetDescendants()) do
+                            if part:IsA("BasePart") and part.Name == "WoodSection" then
+                                sectionCount += 1
+                                totalMass += part.AssemblyMass
+                            end
                         end
-                    end
-                    -- A valid standing tree normally contains multiple wood sections.
-                    if rootWood and sectionCount > 1 then
-                        table.insert(candidates, {Model = model, Mass = totalMass})
+                        if rootWood and sectionCount > 1 then
+                            table.insert(candidates, {Model = model, Mass = totalMass})
+                        else
+                            malformed += 1
+                        end
                     end
                 end
             end
         end
     end
+
     table.sort(candidates, function(a, b) return a.Mass > b.Mass end)
-    return candidates[1] and candidates[1].Model or nil
+    if candidates[1] then return candidates[1].Model end
+    if matching == 0 then
+        return nil, "No " .. treeClass .. " tree is spawned in this server. The list includes game tree types, not only trees currently spawned here."
+    elseif claimed == matching then
+        return nil, "Found " .. matching .. " " .. treeClass .. " tree(s), but all are owned/claimed. Try another server."
+    elseif cut == matching then
+        return nil, "Found " .. matching .. " " .. treeClass .. " tree(s), but they have already been cut."
+    elseif malformed > 0 then
+        return nil, "Found " .. matching .. " matching tree(s), but none had the required standing WoodSection/CutEvent structure."
+    end
+    return nil, "Found " .. matching .. " matching tree(s), but none is currently available to chop."
 end
 
 local function getBestAxeForTree(treeClass)
@@ -976,19 +1057,29 @@ local function moveLooseLogTo(cutLog, destination)
     if not cutLog.PrimaryPart and not wood then
         return false, "The new log has no WoodSection or PrimaryPart to move."
     end
+    if not dragRemote:IsA("RemoteEvent") then
+        return false, "Interaction.ClientIsDragging is present but is not a RemoteEvent."
+    end
 
     local ok, err = pcall(function()
-        -- Match LT2's normal loose-log drag/ownership interaction, then keep
-        -- sending it while moving the model so ownership has time to replicate.
-        for _ = 1, 45 do
-            if not cutLog.Parent then break end
-            dragRemote:FireServer(cutLog)
-            task.wait()
-        end
         local destinationCFrame = destination * CFrame.new(0, 4, 0)
+        -- Request drag ownership while the model is still present, then move it
+        -- repeatedly with its physics velocity cleared so it does not roll away.
+        task.spawn(function()
+            for _ = 1, 60 do
+                if not cutLog.Parent then break end
+                dragRemote:FireServer(cutLog)
+                task.wait()
+            end
+        end)
+        task.wait(0.1)
         for _ = 1, 60 do
             if not cutLog.Parent then break end
-            dragRemote:FireServer(cutLog)
+            local primary = cutLog.PrimaryPart or wood
+            if primary and primary.Parent then
+                primary.AssemblyLinearVelocity = Vector3.zero
+                primary.AssemblyAngularVelocity = Vector3.zero
+            end
             cutLog:PivotTo(destinationCFrame)
             task.wait()
         end
@@ -996,9 +1087,15 @@ local function moveLooseLogTo(cutLog, destination)
             dragRemote:FireServer(cutLog)
             cutLog:PivotTo(destinationCFrame)
         end
+        task.wait(0.25)
     end)
-    if not ok then return false, tostring(err) end
+    if not ok then return false, "The drag/move operation raised an error: " .. tostring(err) end
     if not cutLog.Parent then return false, "The server removed the loose log while it was being moved." end
+    local targetPosition = (destination * CFrame.new(0, 4, 0)).Position
+    local finalPosition = cutLog:GetPivot().Position
+    if (finalPosition - targetPosition).Magnitude > 35 then
+        return false, "The drag request ran, but the log stayed " .. math.floor((finalPosition - targetPosition).Magnitude) .. " studs from the saved position. The server did not accept the drag/move; you may not have drag ownership."
+    end
     return true
 end
 
@@ -1006,17 +1103,16 @@ local function bringOneTree(treeClass, originalCFrame)
     local character, humanoid, root = getCharacter()
     if not root then return false, "Character is not loaded." end
 
-    local tree = findAvailableTree(treeClass)
-    if not tree then
-        return false, "No unowned " .. treeClass .. " tree is currently available in this server. Try Refresh tree types or another server."
-    end
+    local tree, treeError = findAvailableTree(treeClass)
+    if not tree then return false, treeError or ("Could not find an available " .. treeClass .. " tree.") end
     local wood = getTreeRootSection(tree)
     local cutEvent = tree:FindFirstChild("CutEvent")
     local interaction = ReplicatedStorage:FindFirstChild("Interaction")
     local proxy = interaction and interaction:FindFirstChild("RemoteProxy")
-    if not wood or not cutEvent or not proxy then
-        return false, "Tree is missing its root WoodSection, CutEvent, or ReplicatedStorage.Interaction.RemoteProxy."
-    end
+    if not wood then return false, "The selected tree has no usable root WoodSection." end
+    if not cutEvent then return false, "The selected tree has no CutEvent instance; the game's tree structure may have changed." end
+    if not proxy then return false, "ReplicatedStorage.Interaction.RemoteProxy is missing; the game's chop remote may have changed." end
+    if not proxy:IsA("RemoteEvent") then return false, "RemoteProxy exists but is not a RemoteEvent, so FireServer cannot be called." end
 
     local axe, stats, axeError = getBestAxeForTree(treeClass)
     if not axe then return false, axeError end
@@ -1051,10 +1147,20 @@ local function bringOneTree(treeClass, originalCFrame)
         return nil
     end
 
+    local tetherConnection
     local chopOk, chopError = pcall(function()
-        local offset = Vector3.new(5, 2, 0)
-        root.CFrame = CFrame.new(wood.Position + offset)
-        task.wait(0.35)
+        local approach = wood.Position + Vector3.new(5, 3, 0)
+        root.CFrame = CFrame.lookAt(approach, wood.Position)
+        task.wait(0.25)
+
+        -- Keep the character in valid chopping range while the server processes
+        -- each swing. This connection is always disconnected after the pcall.
+        tetherConnection = RunService.Heartbeat:Connect(function()
+            if State.stopTree or not tree.Parent or not wood.Parent or not root.Parent then return end
+            if (root.Position - approach).Magnitude > 3 then
+                root.CFrame = CFrame.lookAt(approach, wood.Position)
+            end
+        end)
 
         local sectionId = 1
         local idValue = wood:FindFirstChild("ID")
@@ -1063,7 +1169,7 @@ local function bringOneTree(treeClass, originalCFrame)
         local args = {
             tool = axe,
             height = 0.3,
-            faceVector = Vector3.new(1, 0, 0),
+            faceVector = (wood.Position - root.Position).Magnitude > 0 and (wood.Position - root.Position).Unit or Vector3.new(1, 0, 0),
             sectionId = sectionId,
             hitPoints = tonumber(stats.Damage) or 0.2,
             cooldown = tonumber(stats.SwingCooldown) or 0,
@@ -1077,15 +1183,12 @@ local function bringOneTree(treeClass, originalCFrame)
             if tree:FindFirstChild("RootCut") then break end
             if not root.Parent then error("Your character root disappeared during the chop.") end
             if not wood.Parent then break end
-            if (root.Position - wood.Position).Magnitude > 14 then
-                root.CFrame = CFrame.new(wood.Position + offset)
-                task.wait(0.1)
-            end
             proxy:FireServer(cutEvent, args)
             task.wait(swingCooldown)
             newLog = newLog or findNewOwnedLog()
         until tree:FindFirstChild("RootCut") or newLog or os.clock() >= deadline
     end)
+    if tetherConnection then tetherConnection:Disconnect() end
     addedConnection:Disconnect()
 
     if not chopOk then return false, "Chop request failed: " .. tostring(chopError) end
@@ -1098,9 +1201,9 @@ local function bringOneTree(treeClass, originalCFrame)
     end
     if not newLog then
         if tree.Parent and not tree:FindFirstChild("RootCut") then
-            return false, "The server did not accept the chop. Check the axe, tree range, and whether the tree is already claimed."
+            return false, "No cut was confirmed after 35 seconds. The server rejected the chop or the axe/tree stats do not match. Check that you have the right axe, the tree is unclaimed, and your character is close enough."
         end
-        return false, "The tree was cut, but its new owned log did not appear in Workspace.LogModels."
+        return false, "The tree was cut, but no new log owned by you appeared in Workspace.LogModels within 10 seconds. The server may not have replicated the log yet."
     end
 
     local moved, moveError = moveLooseLogTo(newLog, originalCFrame)
@@ -1111,54 +1214,143 @@ end
 
 local treeClassOptions = getTreeClasses()
 local treeListRefresh
+local bringStatusLabel
+
+local function setBringStatus(message, isError)
+    if bringStatusLabel and bringStatusLabel.Parent then
+        bringStatusLabel.Text = "STATUS  /  " .. tostring(message)
+        bringStatusLabel.TextColor3 = isError and Color3.fromRGB(255, 132, 150) or Color3.fromRGB(120, 236, 190)
+    end
+end
+
+local function beginBringTree(treeClass)
+    if State.runningTree then
+        local message = "A Bring Tree job is already running. Press Stop before starting another."
+        setBringStatus(message, true)
+        return notify("Bring Tree busy", message, 5)
+    end
+    local _, _, root = getCharacter()
+    if not root then
+        local message = "Your character or HumanoidRootPart is not loaded. Reset or rejoin, then try again."
+        setBringStatus(message, true)
+        return notify("Bring Tree failed", message, 6)
+    end
+
+    State.savedCFrame = root.CFrame
+    local original = State.savedCFrame
+    local requestedAmount = math.clamp(tonumber(State.treeAmount) or 1, 1, 67)
+    State.runningTree = true
+    State.stopTree = false
+    setBringStatus("Starting " .. treeClass .. " • " .. requestedAmount .. " requested", false)
+    notify("Bring Tree", "Starting " .. treeClass .. ". Your starting position has been saved.", 3)
+
+    task.spawn(function()
+        local completed = 0
+        local failure = nil
+        for index = 1, requestedAmount do
+            if State.stopTree then
+                failure = "Stopped by you before the next tree."
+                break
+            end
+            setBringStatus("Processing " .. index .. "/" .. requestedAmount .. " • " .. treeClass, false)
+            local ok, message = bringOneTree(treeClass, original)
+            if not ok then
+                failure = tostring(message or "The tree process failed without returning an error message.")
+                break
+            end
+            completed += 1
+            setBringStatus("Brought " .. completed .. "/" .. requestedAmount .. " • " .. treeClass, false)
+            task.wait(0.45)
+        end
+
+        local _, _, currentRoot = getCharacter()
+        if currentRoot and original then currentRoot.CFrame = original end
+        State.runningTree = false
+        State.stopTree = false
+
+        if failure then
+            setBringStatus("FAILED after " .. completed .. " tree(s): " .. failure, true)
+            notify("Bring Tree failed", failure, 8)
+            warn("[LT2 Bring Tree] " .. failure)
+        else
+            local summary = "Finished: " .. completed .. "/" .. requestedAmount .. " " .. treeClass .. " tree(s) brought to your starting position."
+            setBringStatus(summary, false)
+            notify("Bring Tree finished", summary, 6)
+        end
+    end)
+end
+
 local function createTreeClassList(options)
     local panel = Instance.new("Frame")
-    panel.Name = "TreeClassListPanel"
-    panel.Size = UDim2.new(1, -4, 0, 270)
-    panel.BackgroundColor3 = Color3.fromRGB(22, 26, 37)
+    panel.Name = "BringTreePanel"
+    panel.Size = UDim2.new(1, -4, 0, 326)
+    panel.BackgroundColor3 = Color3.fromRGB(18, 22, 34)
     panel.BorderSizePixel = 0
     panel.Parent = BringPage
-    Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 8)
+    Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 11)
+    local panelStroke = Instance.new("UIStroke")
+    panelStroke.Color = Color3.fromRGB(113, 83, 255)
+    panelStroke.Transparency = 0.48
+    panelStroke.Thickness = 1.15
+    panelStroke.Parent = panel
+    local panelGradient = Instance.new("UIGradient")
+    panelGradient.Color = ColorSequence.new(Color3.fromRGB(26, 31, 49), Color3.fromRGB(17, 20, 31))
+    panelGradient.Rotation = 90
+    panelGradient.Parent = panel
 
     local heading = Instance.new("TextLabel")
     heading.BackgroundTransparency = 1
-    heading.Position = UDim2.new(0, 12, 0, 8)
-    heading.Size = UDim2.new(1, -24, 0, 20)
-    heading.Font = Enum.Font.GothamSemibold
-    heading.Text = "TREE TYPE — SELECT ONE"
-    heading.TextColor3 = Color3.fromRGB(224, 230, 245)
-    heading.TextSize = 11
+    heading.Position = UDim2.new(0, 13, 0, 8)
+    heading.Size = UDim2.new(1, -26, 0, 22)
+    heading.Font = Enum.Font.GothamBold
+    heading.Text = "BRING TREE"
+    heading.TextColor3 = Color3.fromRGB(243, 245, 255)
+    heading.TextSize = 13
     heading.TextXAlignment = Enum.TextXAlignment.Left
     heading.Parent = panel
 
+    local subheading = Instance.new("TextLabel")
+    subheading.BackgroundTransparency = 1
+    subheading.Position = UDim2.new(0, 13, 0, 29)
+    subheading.Size = UDim2.new(1, -26, 0, 17)
+    subheading.Font = Enum.Font.Gotham
+    subheading.Text = "Click a tree type below to start chopping and bringing it back."
+    subheading.TextColor3 = Color3.fromRGB(151, 163, 190)
+    subheading.TextSize = 10
+    subheading.TextXAlignment = Enum.TextXAlignment.Left
+    subheading.Parent = panel
+
     local search = Instance.new("TextBox")
-    search.Position = UDim2.new(0, 10, 0, 34)
-    search.Size = UDim2.new(1, -20, 0, 30)
-    search.BackgroundColor3 = Color3.fromRGB(14, 17, 25)
+    search.Position = UDim2.new(0, 11, 0, 52)
+    search.Size = UDim2.new(1, -22, 0, 30)
+    search.BackgroundColor3 = Color3.fromRGB(11, 14, 23)
     search.BorderSizePixel = 0
     search.PlaceholderText = "Search tree types..."
-    search.PlaceholderColor3 = Color3.fromRGB(120, 130, 150)
+    search.PlaceholderColor3 = Color3.fromRGB(116, 128, 154)
     search.Text = ""
     search.ClearTextOnFocus = false
     search.Font = Enum.Font.Gotham
     search.TextSize = 11
-    search.TextColor3 = Color3.fromRGB(235, 239, 250)
+    search.TextColor3 = Color3.fromRGB(238, 242, 255)
     search.Parent = panel
-    Instance.new("UICorner", search).CornerRadius = UDim.new(0, 6)
+    Instance.new("UICorner", search).CornerRadius = UDim.new(0, 7)
+    local searchStroke = Instance.new("UIStroke")
+    searchStroke.Color = Color3.fromRGB(75, 83, 122)
+    searchStroke.Transparency = 0.55
+    searchStroke.Parent = search
 
     local list = Instance.new("ScrollingFrame")
     list.Name = "TreeTypeList"
-    list.Position = UDim2.new(0, 10, 0, 72)
-    list.Size = UDim2.new(1, -20, 1, -82)
+    list.Position = UDim2.new(0, 11, 0, 91)
+    list.Size = UDim2.new(1, -22, 1, -102)
     list.BackgroundTransparency = 1
     list.BorderSizePixel = 0
     list.ScrollBarThickness = 4
-    list.ScrollBarImageColor3 = Color3.fromRGB(85, 105, 155)
+    list.ScrollBarImageColor3 = Color3.fromRGB(155, 91, 255)
     list.AutomaticCanvasSize = Enum.AutomaticSize.Y
     list.CanvasSize = UDim2.new(0, 0, 0, 0)
     list.Active = true
     list.Parent = panel
-
     local layout = Instance.new("UIListLayout")
     layout.Padding = UDim.new(0, 5)
     layout.SortOrder = Enum.SortOrder.LayoutOrder
@@ -1166,7 +1358,7 @@ local function createTreeClassList(options)
 
     local function render()
         for _, child in ipairs(list:GetChildren()) do
-            if child:IsA("TextButton") then child:Destroy() end
+            if child:IsA("TextButton") or child:IsA("TextLabel") then child:Destroy() end
         end
         local filter = string.lower(search.Text or "")
         local order = 0
@@ -1174,25 +1366,54 @@ local function createTreeClassList(options)
             if filter == "" or string.find(string.lower(className), filter, 1, true) then
                 order += 1
                 local button = Instance.new("TextButton")
-                button.Name = "Tree_" .. className
+                button.Name = "BringTree_" .. className
                 button.LayoutOrder = order
-                button.Size = UDim2.new(1, -2, 0, 30)
-                button.BackgroundColor3 = (State.treeClass == className) and Color3.fromRGB(57, 83, 145) or Color3.fromRGB(31, 36, 50)
+                button.Size = UDim2.new(1, -2, 0, 34)
+                button.BackgroundColor3 = Color3.fromRGB(27, 32, 48)
                 button.BorderSizePixel = 0
-                button.Text = className
-                button.Font = Enum.Font.GothamSemibold
-                button.TextSize = 11
-                button.TextColor3 = Color3.fromRGB(235, 239, 250)
-                button.TextXAlignment = Enum.TextXAlignment.Left
+                button.AutoButtonColor = false
+                button.Text = ""
+                button.Active = true
+                button.Selectable = true
                 button.Parent = list
-                Instance.new("UICorner", button).CornerRadius = UDim.new(0, 6)
-                local padding = Instance.new("UIPadding")
-                padding.PaddingLeft = UDim.new(0, 10)
-                padding.Parent = button
-                button.MouseButton1Click:Connect(function()
-                    State.treeClass = className
-                    render()
-                    notify("Tree selected", className)
+                Instance.new("UICorner", button).CornerRadius = UDim.new(0, 7)
+                local edge = Instance.new("UIStroke")
+                edge.Color = Color3.fromRGB(86, 91, 145)
+                edge.Transparency = 0.62
+                edge.Parent = button
+
+                local name = Instance.new("TextLabel")
+                name.BackgroundTransparency = 1
+                name.Position = UDim2.new(0, 11, 0, 0)
+                name.Size = UDim2.new(1, -118, 1, 0)
+                name.Font = Enum.Font.GothamSemibold
+                name.Text = className
+                name.TextColor3 = Color3.fromRGB(232, 237, 252)
+                name.TextSize = 11
+                name.TextXAlignment = Enum.TextXAlignment.Left
+                name.Parent = button
+
+                local action = Instance.new("TextLabel")
+                action.AnchorPoint = Vector2.new(1, 0.5)
+                action.Position = UDim2.new(1, -9, 0.5, 0)
+                action.Size = UDim2.new(0, 92, 0, 23)
+                action.BackgroundColor3 = Color3.fromRGB(89, 57, 178)
+                action.BorderSizePixel = 0
+                action.Font = Enum.Font.GothamBold
+                action.Text = "BRING TREE"
+                action.TextColor3 = Color3.fromRGB(255, 255, 255)
+                action.TextSize = 9
+                action.Parent = button
+                Instance.new("UICorner", action).CornerRadius = UDim.new(0, 6)
+
+                button.MouseEnter:Connect(function()
+                    TweenService:Create(button, TweenInfo.new(0.12), {BackgroundColor3 = Color3.fromRGB(39, 43, 67)}):Play()
+                end)
+                button.MouseLeave:Connect(function()
+                    TweenService:Create(button, TweenInfo.new(0.12), {BackgroundColor3 = Color3.fromRGB(27, 32, 48)}):Play()
+                end)
+                button.Activated:Connect(function()
+                    beginBringTree(className)
                 end)
             end
         end
@@ -1215,48 +1436,25 @@ local function createTreeClassList(options)
     end
 end
 
+addHeader(BringPage, "Tree collection")
+addInfo(BringPage, "Each tree type is a one-click action. Clicking a row saves your current position, equips a compatible axe, attempts the chop, then returns the resulting owned log. The server can still reject game remotes or drag ownership; the exact reason will appear below.", 68)
+addStepper(BringPage, "Trees to bring per click (max 67)", 1, 1, 67, function(value) State.treeAmount = value end)
 createTreeClassList(treeClassOptions)
-addHeader(BringPage, "Automated bring")
-addInfo(BringPage, "Choose a tree from the vertical list. The script finds a suitable axe in your inventory, chops one tree at a time, then attempts to move the resulting log to your saved position. Server-side game checks can still reject a chop or log move.", 76)
-addStepper(BringPage, "Trees to bring (max 67)", 1, 1, 67, function(value) State.treeAmount = value end)
-addButton(BringPage, "Refresh tree types", "Rebuilds the list using known types and trees currently streamed in this server.", function()
+
+bringStatusLabel = addInfo(BringPage, "STATUS  /  Ready — click a tree type to bring it.", 62)
+bringStatusLabel.TextColor3 = Color3.fromRGB(120, 236, 190)
+addButton(BringPage, "Refresh tree types", "Refreshes the game-wide tree class list and types currently streamed in this server.", function()
     treeClassOptions = getTreeClasses()
     if treeListRefresh then treeListRefresh(treeClassOptions) end
-    notify("Tree types refreshed", tostring(#treeClassOptions) .. " types are listed. A listed type may not currently be spawned here.")
+    local msg = tostring(#treeClassOptions) .. " tree types listed. A type may not be spawned in this server."
+    setBringStatus(msg, false)
+    notify("Tree list refreshed", msg, 5)
 end)
-addButton(BringPage, "Bring selected tree(s)", "Save position → equip a suitable axe → chop → bring the new log back.", function()
-    if State.runningTree then return notify("Bring Tree", "A tree process is already running.") end
-    local _, _, root = getCharacter()
-    if not root then return notify("Bring Tree failed", "Your character is not loaded.") end
-    State.savedCFrame = root.CFrame
-    local original = State.savedCFrame
-    State.runningTree = true
-    State.stopTree = false
-    task.spawn(function()
-        local completed = 0
-        local selectedClass = State.treeClass
-        local requestedAmount = State.treeAmount
-        for index = 1, requestedAmount do
-            if State.stopTree then break end
-            notify("Bring Tree", "Processing " .. index .. "/" .. requestedAmount .. " • " .. selectedClass, 2)
-            local ok, message = bringOneTree(selectedClass, original)
-            if not ok then
-                notify("Bring Tree stopped", message, 6)
-                break
-            end
-            completed += 1
-            task.wait(0.35)
-        end
-        local _, _, currentRoot = getCharacter()
-        if currentRoot and original then currentRoot.CFrame = original end
-        State.runningTree = false
-        State.stopTree = false
-        notify("Bring Tree finished", completed .. " of " .. requestedAmount .. " tree(s) brought back.", 5)
-    end)
-end, Color3.fromRGB(68, 170, 120))
-addButton(BringPage, "Stop Bring Tree", "Stops before the next chop/step and returns you to the saved position.", function()
+addButton(BringPage, "Stop Bring Tree", "Stops after the current chop/move check and returns you to your saved position.", function()
+    if not State.runningTree then return notify("Bring Tree", "There is no active Bring Tree job.") end
     State.stopTree = true
-    notify("Stopping", "Bring Tree will stop at its next safe check.")
+    setBringStatus("Stop requested — waiting for the current step to finish.", false)
+    notify("Stopping Bring Tree", "The job will stop at its next safe check.")
 end, Color3.fromRGB(185, 83, 92))
 
 --// Blueprint purchase --------------------------------------------------------
@@ -1329,6 +1527,215 @@ local function listBlueprintModels()
     end)
     return list
 end
+
+--// Item finder and local player teleporter ------------------------------------
+local function getModelTarget(model)
+    if not model or not model.Parent then return nil end
+    if model:IsA("BasePart") then return model end
+    local named = model:FindFirstChild("Main") or model:FindFirstChild("WoodSection", true)
+    if named and named:IsA("BasePart") then return named end
+    if model.PrimaryPart then return model.PrimaryPart end
+    return model:FindFirstChildWhichIsA("BasePart", true)
+end
+
+local function scanTeleportItems()
+    local results, seen = {}, {}
+    local folders = {
+        Workspace:FindFirstChild("LogModels"),
+        Workspace:FindFirstChild("PlayerModels"),
+        getShopItemsFolder(),
+    }
+    for _, folder in ipairs(folders) do
+        if folder then
+            for _, object in ipairs(folder:GetChildren()) do
+                if (object:IsA("Model") or object:IsA("BasePart")) and not seen[object] then
+                    local target = getModelTarget(object)
+                    if target then
+                        seen[object] = true
+                        local itemName = object.Name
+                        local boxName = object:FindFirstChild("BoxItemName") or object:FindFirstChild("ItemName")
+                        if boxName and boxName:IsA("ValueBase") then itemName = tostring(boxName.Value) end
+                        local owner = object:FindFirstChild("Owner")
+                        local ownerValue = owner and owner.Value
+                        local ownerName = "Unclaimed / unknown"
+                        if typeof(ownerValue) == "Instance" then ownerName = ownerValue.Name
+                        elseif ownerValue ~= nil and tostring(ownerValue) ~= "" then ownerName = tostring(ownerValue) end
+                        table.insert(results, {Object = object, Target = target, Name = itemName, Owner = ownerName})
+                    end
+                end
+            end
+        end
+    end
+    table.sort(results, function(a, b) return string.lower(a.Name) < string.lower(b.Name) end)
+    return results
+end
+
+addHeader(ItemsPage, "Item finder & teleporter")
+addInfo(ItemsPage, "Scans loose logs, player models and stocked shop items. Click a result to teleport your character near it; this does not move or steal the item.", 56)
+local itemSearch = Instance.new("TextBox")
+itemSearch.Size = UDim2.new(1, -4, 0, 34)
+itemSearch.BackgroundColor3 = Color3.fromRGB(17, 21, 33)
+itemSearch.BorderSizePixel = 0
+itemSearch.PlaceholderText = "Search logs, boxes and items..."
+itemSearch.PlaceholderColor3 = Color3.fromRGB(122, 133, 158)
+itemSearch.Text = ""
+itemSearch.ClearTextOnFocus = false
+itemSearch.Font = Enum.Font.Gotham
+itemSearch.TextSize = 11
+itemSearch.TextColor3 = Color3.fromRGB(236, 240, 255)
+itemSearch.Parent = ItemsPage
+Instance.new("UICorner", itemSearch).CornerRadius = UDim.new(0, 8)
+local itemSearchPadding = Instance.new("UIPadding")
+itemSearchPadding.PaddingLeft = UDim.new(0, 10)
+itemSearchPadding.Parent = itemSearch
+local itemList = Instance.new("ScrollingFrame")
+itemList.Name = "ItemResults"
+itemList.Size = UDim2.new(1, -4, 0, 300)
+itemList.BackgroundColor3 = Color3.fromRGB(17, 21, 33)
+itemList.BorderSizePixel = 0
+itemList.ScrollBarThickness = 4
+itemList.ScrollBarImageColor3 = Color3.fromRGB(155, 91, 255)
+itemList.AutomaticCanvasSize = Enum.AutomaticSize.Y
+itemList.CanvasSize = UDim2.new(0, 0, 0, 0)
+itemList.Active = true
+itemList.Parent = ItemsPage
+Instance.new("UICorner", itemList).CornerRadius = UDim.new(0, 9)
+local itemLayout = Instance.new("UIListLayout")
+itemLayout.Padding = UDim.new(0, 5)
+itemLayout.SortOrder = Enum.SortOrder.LayoutOrder
+itemLayout.Parent = itemList
+local itemPadding = Instance.new("UIPadding")
+itemPadding.PaddingTop = UDim.new(0, 7)
+itemPadding.PaddingLeft = UDim.new(0, 7)
+itemPadding.PaddingRight = UDim.new(0, 7)
+itemPadding.PaddingBottom = UDim.new(0, 7)
+itemPadding.Parent = itemList
+local itemStatus = addInfo(ItemsPage, "ITEMS  /  Press Refresh to scan the current server.", 42)
+local function renderItemResults()
+    for _, child in ipairs(itemList:GetChildren()) do
+        if child:IsA("TextButton") or child:IsA("TextLabel") then child:Destroy() end
+    end
+    local query = string.lower(itemSearch.Text or "")
+    local results = scanTeleportItems()
+    local order = 0
+    for _, entry in ipairs(results) do
+        if query == "" or string.find(string.lower(entry.Name), query, 1, true) then
+            order += 1
+            if order <= 100 then
+                local row = Instance.new("TextButton")
+                row.Size = UDim2.new(1, -2, 0, 38)
+                row.LayoutOrder = order
+                row.BackgroundColor3 = Color3.fromRGB(27, 32, 48)
+                row.BorderSizePixel = 0
+                row.AutoButtonColor = false
+                row.Text = ""
+                row.Active = true
+                row.Parent = itemList
+                Instance.new("UICorner", row).CornerRadius = UDim.new(0, 7)
+                local name = Instance.new("TextLabel")
+                name.BackgroundTransparency = 1
+                name.Position = UDim2.new(0, 10, 0, 3)
+                name.Size = UDim2.new(1, -18, 0, 17)
+                name.Font = Enum.Font.GothamSemibold
+                name.Text = entry.Name
+                name.TextColor3 = Color3.fromRGB(232, 237, 252)
+                name.TextSize = 11
+                name.TextXAlignment = Enum.TextXAlignment.Left
+                name.Parent = row
+                local sub = Instance.new("TextLabel")
+                sub.BackgroundTransparency = 1
+                sub.Position = UDim2.new(0, 10, 0, 20)
+                sub.Size = UDim2.new(1, -18, 0, 14)
+                sub.Font = Enum.Font.Gotham
+                sub.Text = "Owner: " .. entry.Owner .. "  •  Click to teleport nearby"
+                sub.TextColor3 = Color3.fromRGB(137, 148, 171)
+                sub.TextSize = 9
+                sub.TextXAlignment = Enum.TextXAlignment.Left
+                sub.Parent = row
+                row.Activated:Connect(function()
+                    if not entry.Object.Parent or not entry.Target.Parent then
+                        return notify("Item teleport failed", "That item disappeared; refresh the item list and try again.")
+                    end
+                    local _, _, root = getCharacter()
+                    if not root then return notify("Item teleport failed", "Your character is not loaded.") end
+                    local targetPosition = entry.Target.Position + Vector3.new(0, 6, 0)
+                    setCharacterCFrame(CFrame.lookAt(targetPosition, entry.Target.Position))
+                    notify("Item teleport", "Moved near " .. entry.Name .. ". The item itself was not moved.")
+                end)
+            end
+        end
+    end
+    itemStatus.Text = "ITEMS  /  " .. tostring(math.min(order, 100)) .. " matching result(s) shown."
+end
+itemSearch:GetPropertyChangedSignal("Text"):Connect(renderItemResults)
+addButton(ItemsPage, "Refresh item list", "Rescans logs, player models and store stock currently loaded in the server.", renderItemResults)
+renderItemResults()
+
+--// World / visual controls ----------------------------------------------------
+addHeader(WorldPage, "Client-side environment")
+addInfo(WorldPage, "These lighting and visual options only change what you see locally. They do not alter the server or other players.", 52)
+local originalClockTime = Lighting.ClockTime
+local originalGlobalShadows = Lighting.GlobalShadows
+local originalBrightness = Lighting.Brightness
+local originalAmbient = Lighting.Ambient
+local originalOutdoorAmbient = Lighting.OutdoorAmbient
+local originalFogEnd = Lighting.FogEnd
+local alwaysDaySetter, alwaysNightSetter
+local _, setAlwaysDay = addToggle(WorldPage, "Always day", false, function(value)
+    State.alwaysDay = value
+    if value then
+        State.alwaysNight = false
+        if alwaysNightSetter then alwaysNightSetter(false, false) end
+        Lighting.ClockTime = 13
+    end
+end, "Locks your local lighting to daytime.")
+alwaysDaySetter = setAlwaysDay
+local _, setAlwaysNight = addToggle(WorldPage, "Always night", false, function(value)
+    State.alwaysNight = value
+    if value then
+        State.alwaysDay = false
+        if alwaysDaySetter then alwaysDaySetter(false, false) end
+        Lighting.ClockTime = 0
+    end
+end, "Locks your local lighting to night-time.")
+alwaysNightSetter = setAlwaysNight
+local _, setNoShadows = addToggle(WorldPage, "Disable global shadows", false, function(value)
+    State.noShadows = value
+    Lighting.GlobalShadows = not value
+end, "Local performance / visibility option.")
+local _, setFullBright = addToggle(WorldPage, "Full bright", false, function(value)
+    State.fullBright = value
+    if value then
+        Lighting.Brightness = 3
+        Lighting.Ambient = Color3.fromRGB(190, 190, 205)
+        Lighting.OutdoorAmbient = Color3.fromRGB(210, 210, 225)
+    else
+        Lighting.Brightness = originalBrightness
+        Lighting.Ambient = originalAmbient
+        Lighting.OutdoorAmbient = originalOutdoorAmbient
+    end
+end, "Raises local brightness; does not change server time.")
+local _, setFogDistance = addToggle(WorldPage, "Remove fog distance", false, function(value)
+    if value then Lighting.FogEnd = 100000 else Lighting.FogEnd = originalFogEnd end
+end, "Extends your local fog distance. Atmosphere effects may still be present.")
+addButton(WorldPage, "Restore original lighting", "Restores the lighting values captured when the hub started.", function()
+    State.alwaysDay = false
+    State.alwaysNight = false
+    State.noShadows = false
+    State.fullBright = false
+    Lighting.ClockTime = originalClockTime
+    Lighting.GlobalShadows = originalGlobalShadows
+    Lighting.Brightness = originalBrightness
+    Lighting.Ambient = originalAmbient
+    Lighting.OutdoorAmbient = originalOutdoorAmbient
+    Lighting.FogEnd = originalFogEnd
+    if alwaysDaySetter then alwaysDaySetter(false, false) end
+    if alwaysNightSetter then alwaysNightSetter(false, false) end
+    if setNoShadows then setNoShadows(false, false) end
+    if setFullBright then setFullBright(false, false) end
+    if setFogDistance then setFogDistance(false, false) end
+    notify("Lighting restored", "Your original local lighting values have been restored.")
+end)
 
 local function tryPing()
     local ping = ReplicatedStorage:FindFirstChild("TestPing")
@@ -1630,42 +2037,70 @@ addButton(SettingsPage, "Refresh tree selector", "Rescan currently visible serve
     if treeListRefresh then treeListRefresh(treeClassOptions) end
     notify("Tree selector", #treeClassOptions .. " tree classes are listed; only some may be spawned in this server.")
 end)
-addButton(SettingsPage, "Remove fog / visual effects", "Client-side change only; does not affect other players.", function()
-    for _, child in ipairs(Lighting:GetChildren()) do
-        if child:IsA("Atmosphere") or child:IsA("BloomEffect") or child:IsA("ColorCorrectionEffect") or child:IsA("SunRaysEffect") then
-            if not child:GetAttribute("LT2HubEffect") then child:SetAttribute("LT2HubEffect", true); child:Destroy() end
+local savedEffectStates = {}
+local function restoreSavedVisualEffects()
+    local restored = 0
+    for effect, saved in pairs(savedEffectStates) do
+        if effect and effect.Parent then
+            pcall(function()
+                if type(saved) == "table" then
+                    effect.Density = saved.Density
+                    effect.Haze = saved.Haze
+                    effect.Glare = saved.Glare
+                else
+                    effect.Enabled = saved
+                end
+            end)
+            restored += 1
         end
     end
-    notify("Visual effects", "Local atmosphere and post-processing effects removed.")
+    savedEffectStates = {}
+    return restored
+end
+addButton(SettingsPage, "Disable visual effects", "Turns off local Atmosphere/Bloom/ColorCorrection/SunRays effects without deleting them.", function()
+    local changed = 0
+    for _, child in ipairs(Lighting:GetChildren()) do
+        if child:IsA("Atmosphere") then
+            if savedEffectStates[child] == nil then
+                savedEffectStates[child] = {Density = child.Density, Haze = child.Haze, Glare = child.Glare}
+            end
+            child.Density = 0
+            child.Haze = 0
+            child.Glare = 0
+            changed += 1
+        elseif child:IsA("BloomEffect") or child:IsA("ColorCorrectionEffect") or child:IsA("SunRaysEffect") then
+            if savedEffectStates[child] == nil then savedEffectStates[child] = child.Enabled end
+            child.Enabled = false
+            changed += 1
+        end
+    end
+    notify("Visual effects", "Disabled " .. changed .. " local lighting effect(s). You can restore them before unloading.")
 end)
-addToggle(SettingsPage, "Always day", false, function(value)
-    if value then Lighting.ClockTime = 13 end
-    State.alwaysDay = value
+addButton(SettingsPage, "Restore visual effects", "Re-enables lighting effects that were switched off by this hub.", function()
+    local restored = restoreSavedVisualEffects()
+    notify("Visual effects", "Restored " .. restored .. " lighting effect(s).")
 end)
-addButton(SettingsPage, "Unload hub", "Stops loops, restores camera/collisions, and removes the UI.", function()
-    State.closed = true
-    State.fly = false
-    State.stopTree = true
-    State.stopBlueprints = true
-    State.noclip = false
-    if State.cameraSaved then
-        local saved = State.cameraSaved
-        local camera = Workspace.CurrentCamera
-        if camera then camera.CameraType = saved.CameraType; camera.CameraSubject = saved.CameraSubject; camera.CFrame = saved.CFrame end
-        State.cameraSaved = nil
+addToggle(SettingsPage, "RGB animation", true, function(value)
+    State.rgbEnabled = value
+    notify("RGB animation", value and "Animated rainbow accents enabled." or "Rainbow animation paused.")
+end)
+addStepper(SettingsPage, "RGB animation speed", 55, 5, 150, function(value) State.rgbSpeed = value end)
+addButton(SettingsPage, "Open World controls", "Use the World tab for day/night, shadows, full bright and fog settings.", function()
+    local targetPage = Pages.World
+    if targetPage then
+        for pageName, page in pairs(Pages) do
+            page.Visible = (pageName == "World")
+            local tab = TabButtons[pageName]
+            if tab then
+                tab.BackgroundColor3 = (pageName == "World") and Color3.fromRGB(46, 56, 83) or Color3.fromRGB(24, 28, 39)
+                tab.TextColor3 = (pageName == "World") and Color3.fromRGB(245, 247, 255) or Color3.fromRGB(160, 169, 188)
+            end
+        end
+        ActiveTab = "World"
     end
-    for part, canCollide in pairs(State.oldCollisions) do
-        if part and part.Parent then pcall(function() part.CanCollide = canCollide end) end
-    end
-    local character = LocalPlayer.Character
-    local root = character and character:FindFirstChild("HumanoidRootPart")
-    if root then
-        local g = root:FindFirstChild("LT2HubFlyGyro"); if g then g:Destroy() end
-        local v = root:FindFirstChild("LT2HubFlyVelocity"); if v then v:Destroy() end
-        local humanoid = character:FindFirstChildOfClass("Humanoid")
-        if humanoid then humanoid.PlatformStand = false end
-    end
-    ScreenGui:Destroy()
+end)
+addButton(SettingsPage, "Unload hub", "Stops loops, restores camera/collisions and local lighting, then removes the UI.", function()
+    if unloadHub then unloadHub() end
 end, Color3.fromRGB(185, 83, 92))
 
 --// Runtime listeners ---------------------------------------------------------
@@ -1706,9 +2141,10 @@ RunService.Stepped:Connect(function()
         if State.jumpPower and humanoid.UseJumpPower and humanoid.JumpPower ~= State.jumpPower then humanoid.JumpPower = State.jumpPower end
     end
     if State.alwaysDay then Lighting.ClockTime = 13 end
+    if State.alwaysNight then Lighting.ClockTime = 0 end
 end)
 
-local function unloadHub()
+unloadHub = function()
     if State.closed then return end
     State.closed = true
     State.fly = false
@@ -1739,9 +2175,16 @@ local function unloadHub()
         local humanoid = character:FindFirstChildOfClass("Humanoid")
         if humanoid then humanoid.PlatformStand = false end
     end
+    Lighting.ClockTime = originalClockTime
+    Lighting.GlobalShadows = originalGlobalShadows
+    Lighting.Brightness = originalBrightness
+    Lighting.Ambient = originalAmbient
+    Lighting.OutdoorAmbient = originalOutdoorAmbient
+    Lighting.FogEnd = originalFogEnd
+    restoreSavedVisualEffects()
     if ScreenGui then ScreenGui:Destroy() end
 end
-Close.MouseButton1Click:Connect(unloadHub)
+Close.Activated:Connect(unloadHub)
 
 -- Animate the multicolour accent without a separate forever coroutine.
 local rainbowConnection
@@ -1750,7 +2193,10 @@ rainbowConnection = RunService.RenderStepped:Connect(function(dt)
         if rainbowConnection then rainbowConnection:Disconnect() end
         return
     end
-    AccentGradient.Rotation = (AccentGradient.Rotation + dt * 45) % 360
+    if State.rgbEnabled then
+        AccentGradient.Rotation = (AccentGradient.Rotation + dt * State.rgbSpeed) % 360
+        MainStrokeGradient.Rotation = (MainStrokeGradient.Rotation + dt * State.rgbSpeed * 0.65) % 360
+    end
 end)
 
 -- Ensure Home is visible on first load.
@@ -1767,4 +2213,4 @@ if Pages.Home then
     end
 end
 notify("LT2 Utility Hub loaded", "RightShift opens/closes the menu. Q toggles fly.", 5)
-print("[LT2 Utility Hub] Loaded successfully.")
+print("[LT2 Utility Hub] Loaded successfully. Build: Neon UI / One-Click Bring Tree.")
