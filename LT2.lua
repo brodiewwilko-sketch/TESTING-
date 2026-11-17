@@ -45,7 +45,20 @@ local State = {
     jumpPower = 50,
     flySpeed = 75,
     treeClass = "Generic",
+    selectedTreeClass = nil,
     treeAmount = 1,
+    pinkCarRunning = false,
+    stopPinkCar = false,
+    pinkCarAttempts = 10,
+    selectedCarSpawner = nil,
+    awaitingCarSpawner = false,
+    hardDragger = false,
+    sprintEnabled = false,
+    ctrlClickTP = false,
+    vehicleSpeed = 30,
+    vehicleSpeedEnabled = false,
+    vehicleSpeedTarget = nil,
+    originalVehicleSpeed = nil,
     guiKey = Enum.KeyCode.RightShift,
     flyKey = Enum.KeyCode.Q,
     savedCFrame = nil,
@@ -167,8 +180,12 @@ Main.BorderSizePixel = 0
 Main.Active = true
 Main.ZIndex = 1
 Main.Parent = ScreenGui
+local MainScale = Instance.new("UIScale")
+MainScale.Name = "HubScale"
+MainScale.Scale = 1
+MainScale.Parent = Main
 local MainCorner = Instance.new("UICorner")
-MainCorner.CornerRadius = UDim.new(0, 13)
+MainCorner.CornerRadius = UDim.new(0, 24)
 MainCorner.Parent = Main
 local MainStroke = Instance.new("UIStroke")
 MainStroke.Thickness = 1.7
@@ -198,7 +215,7 @@ TopGradient.Color = ColorSequence.new(Color3.fromRGB(25, 29, 45), Color3.fromRGB
 TopGradient.Rotation = 90
 TopGradient.Parent = Top
 local TopCorner = Instance.new("UICorner")
-TopCorner.CornerRadius = UDim.new(0, 13)
+TopCorner.CornerRadius = UDim.new(0, 20)
 TopCorner.Parent = Top
 local TopCover = Instance.new("Frame")
 TopCover.Position = UDim2.new(0, 0, 1, -13)
@@ -257,7 +274,7 @@ Minimize.Parent = Top
 Minimize.ZIndex = 30
 Minimize.Active = true
 Minimize.Selectable = true
-Instance.new("UICorner", Minimize).CornerRadius = UDim.new(0, 7)
+Instance.new("UICorner", Minimize).CornerRadius = UDim.new(0, 12)
 
 local Close = Instance.new("TextButton")
 Close.AnchorPoint = Vector2.new(1, 0.5)
@@ -273,7 +290,40 @@ Close.Parent = Top
 Close.ZIndex = 30
 Close.Active = true
 Close.Selectable = true
-Instance.new("UICorner", Close).CornerRadius = UDim.new(0, 7)
+Instance.new("UICorner", Close).CornerRadius = UDim.new(0, 12)
+
+-- Drag the rounded window by its top bar. This does not intercept button clicks.
+local windowDragging = false
+local windowDragInput = nil
+local windowDragStart = nil
+local windowStartPosition = nil
+Top.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        windowDragging = true
+        windowDragStart = input.Position
+        windowStartPosition = Main.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                windowDragging = false
+                windowDragInput = nil
+            end
+        end)
+    end
+end)
+Top.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        windowDragInput = input
+    end
+end)
+local windowChangedConnection = UserInputService.InputChanged:Connect(function(input)
+    if windowDragging and input == windowDragInput and windowDragStart and windowStartPosition then
+        local delta = input.Position - windowDragStart
+        Main.Position = UDim2.new(
+            windowStartPosition.X.Scale, windowStartPosition.X.Offset + delta.X,
+            windowStartPosition.Y.Scale, windowStartPosition.Y.Offset + delta.Y
+        )
+    end
+end)
 
 local Sidebar = Instance.new("Frame")
 Sidebar.Position = UDim2.new(0, 0, 0, 54)
@@ -289,8 +339,8 @@ SideLayout.SortOrder = Enum.SortOrder.LayoutOrder
 SideLayout.Parent = Sidebar
 local SidePadding = Instance.new("UIPadding")
 SidePadding.PaddingTop = UDim.new(0, 12)
-SidePadding.PaddingLeft = UDim.new(0, 9)
-SidePadding.PaddingRight = UDim.new(0, 9)
+SidePadding.PaddingLeft = UDim.new(0, 14)
+SidePadding.PaddingRight = UDim.new(0, 14)
 SidePadding.Parent = Sidebar
 
 local Content = Instance.new("Frame")
@@ -320,7 +370,7 @@ local function createPage(name)
     scroll.Visible = false
     scroll.Parent = Content
     local layout = Instance.new("UIListLayout")
-    layout.Padding = UDim.new(0, 9)
+    layout.Padding = UDim.new(0, 14)
     layout.SortOrder = Enum.SortOrder.LayoutOrder
     layout.Parent = scroll
     local padding = Instance.new("UIPadding")
@@ -347,7 +397,7 @@ local function createPage(name)
     tab.ZIndex = 12
     TabCount = TabCount + 1
     tab.LayoutOrder = TabCount
-    Instance.new("UICorner", tab).CornerRadius = UDim.new(0, 8)
+    Instance.new("UICorner", tab).CornerRadius = UDim.new(0, 14)
     local tabStroke = Instance.new("UIStroke")
     tabStroke.Color = Color3.fromRGB(56, 64, 91)
     tabStroke.Transparency = 0.55
@@ -397,12 +447,12 @@ local function addInfo(page, text, height)
     label.TextWrapped = true
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.Parent = page
-    Instance.new("UICorner", label).CornerRadius = UDim.new(0, 8)
+    Instance.new("UICorner", label).CornerRadius = UDim.new(0, 14)
     local pad = Instance.new("UIPadding")
     pad.PaddingLeft = UDim.new(0, 12)
     pad.PaddingRight = UDim.new(0, 12)
-    pad.PaddingTop = UDim.new(0, 7)
-    pad.PaddingBottom = UDim.new(0, 7)
+    pad.PaddingTop = UDim.new(0, 12)
+    pad.PaddingBottom = UDim.new(0, 12)
     pad.Parent = label
     return label
 end
@@ -417,7 +467,7 @@ local function addButton(page, text, description, callback, accentColor)
     button.Parent = page
     button.Active = true
     button.Selectable = true
-    Instance.new("UICorner", button).CornerRadius = UDim.new(0, 8)
+    Instance.new("UICorner", button).CornerRadius = UDim.new(0, 14)
     local buttonStroke = Instance.new("UIStroke")
     buttonStroke.Color = accentColor or Color3.fromRGB(84, 110, 210)
     buttonStroke.Transparency = 0.72
@@ -480,7 +530,7 @@ local function addStepper(page, titleText, initial, minimum, maximum, onChange)
     row.BorderSizePixel = 0
     row.Size = UDim2.new(1, -4, 0, 52)
     row.Parent = page
-    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 8)
+    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 14)
     local label = Instance.new("TextLabel")
     label.BackgroundTransparency = 1
     label.Position = UDim2.new(0, 12, 0, 0)
@@ -511,7 +561,7 @@ local function addStepper(page, titleText, initial, minimum, maximum, onChange)
         b.TextSize = 15
         b.TextColor3 = Color3.fromRGB(240, 243, 255)
         b.Parent = row
-        Instance.new("UICorner", b).CornerRadius = UDim.new(0, 6)
+        Instance.new("UICorner", b).CornerRadius = UDim.new(0, 10)
         b.Activated:Connect(function()
             value = math.clamp(value + delta, minimum, maximum)
             valueLabel.Text = tostring(value)
@@ -530,7 +580,7 @@ local function addToggle(page, titleText, initial, callback, description)
     row.BorderSizePixel = 0
     row.Size = UDim2.new(1, -4, 0, description and 58 or 46)
     row.Parent = page
-    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 8)
+    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 14)
     local title = Instance.new("TextLabel")
     title.BackgroundTransparency = 1
     title.Position = UDim2.new(0, 12, 0, description and 7 or 0)
@@ -594,7 +644,7 @@ local function addSelector(page, titleText, options, defaultValue, onChange)
     row.BorderSizePixel = 0
     row.Size = UDim2.new(1, -4, 0, 58)
     row.Parent = page
-    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 8)
+    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 14)
     local label = Instance.new("TextLabel")
     label.BackgroundTransparency = 1
     label.Position = UDim2.new(0, 12, 0, 5)
@@ -632,7 +682,7 @@ local function addSelector(page, titleText, options, defaultValue, onChange)
         b.TextSize = 17
         b.TextColor3 = Color3.fromRGB(240, 243, 255)
         b.Parent = row
-        Instance.new("UICorner", b).CornerRadius = UDim.new(0, 6)
+        Instance.new("UICorner", b).CornerRadius = UDim.new(0, 10)
         b.Activated:Connect(function() change(i == 1 and -1 or 1) end)
     end
     if onChange then onChange(options[index]) end
@@ -651,6 +701,7 @@ local ViewerPage = createPage("Viewers")
 local PlayerPage = createPage("Player")
 local BuyPage = createPage("Blueprints")
 local ItemsPage = createPage("Items")
+local VehiclePage = createPage("Vehicles")
 local WorldPage = createPage("World")
 local SettingsPage = createPage("Settings")
 
@@ -730,7 +781,7 @@ local function teleportToBase()
 end
 
 addHeader(HomePage, "Welcome back")
-addInfo(HomePage, "LT2 Utility Hub is loaded. Explore one-click Bring Tree, cave viewers, player/item teleports, blueprint buying, movement and local world controls.", 56)
+addInfo(HomePage, "LT2 Utility Hub is loaded. Explore one-click Bring Tree, Auto Farmer, cave viewers, player/plot teleports, vehicle tools, pink-car finder, blueprint/vehicle buying, Hard Dragger and appearance settings.", 56)
 addButton(HomePage, "Save current position", "Stores the exact position for Bring Tree and manual return.", function()
     local _, _, root = getCharacter()
     if not root then return notify("Save position failed", "Character is not loaded.") end
@@ -781,11 +832,26 @@ addHeader(TeleportPage, "Player shortcuts")
 addInfo(TeleportPage, "Teleport near an online player. This only moves your character; it does not affect their character or plot.", 48)
 local function addPlayerTeleport(player)
     if not player or player == LocalPlayer then return end
-    addButton(TeleportPage, "Go to " .. player.Name, "Teleport near this player if their character is loaded.", function()
+    addButton(TeleportPage, "Go to " .. player.Name, "Teleport near this player's character.", function()
         local targetCharacter = player.Character
         local targetRoot = targetCharacter and targetCharacter:FindFirstChild("HumanoidRootPart")
         if not targetRoot then return notify("Player teleport failed", player.Name .. " does not have a loaded character.") end
         setCharacterCFrame(targetRoot.CFrame * CFrame.new(0, 0, 7))
+    end, Color3.fromRGB(83, 135, 220))
+    addButton(TeleportPage, player.Name .. "'s plot", "Teleport yourself to this player's plot. This does not move or edit their character or plot.", function()
+        local properties = Workspace:FindFirstChild("Properties")
+        if not properties then return notify("Plot teleport failed", "Workspace.Properties was not found.") end
+        for _, property in ipairs(properties:GetChildren()) do
+            local owner = property:FindFirstChild("Owner")
+            local origin = property:FindFirstChild("OriginSquare")
+            local ownerValue = owner and owner.Value
+            local matches = ownerValue == player or ownerValue == player.Name or tostring(ownerValue) == player.Name
+            if matches and origin and origin:IsA("BasePart") then
+                setCharacterCFrame(origin.CFrame * CFrame.new(0, 7, 0))
+                return notify("Plot teleport", "Moved to " .. player.Name .. "'s plot.")
+            end
+        end
+        notify("Plot teleport failed", "No loaded plot owned by " .. player.Name .. " was found.")
     end, Color3.fromRGB(83, 135, 220))
 end
 for _, player in ipairs(Players:GetPlayers()) do addPlayerTeleport(player) end
@@ -1045,90 +1111,100 @@ local function findOwnedLooseLog(treeClass, startTime, baselineLogs)
 end
 
 local function moveLooseLogTo(cutLog, destination)
+    if not cutLog or not cutLog.Parent then
+        return false, "The chopped log disappeared before it could be moved."
+    end
+
     local interaction = ReplicatedStorage:FindFirstChild("Interaction")
     local dragRemote = interaction and interaction:FindFirstChild("ClientIsDragging")
+    local ownershipRemote = interaction and interaction:FindFirstChild("ClientRequestOwnership")
     if not dragRemote then return false, "Interaction.ClientIsDragging was not found." end
-    if not cutLog or not cutLog.Parent then return false, "The cut tree log disappeared before it could be moved." end
+    if not dragRemote:IsA("RemoteEvent") then
+        return false, "ClientIsDragging is not a RemoteEvent in this server version."
+    end
 
     local wood = cutLog:FindFirstChild("WoodSection", true)
-    if wood and wood:IsA("BasePart") then
-        pcall(function() cutLog.PrimaryPart = wood end)
-    end
-    if not cutLog.PrimaryPart and not wood then
-        return false, "The new log has no WoodSection or PrimaryPart to move."
-    end
-    if not dragRemote:IsA("RemoteEvent") then
-        return false, "Interaction.ClientIsDragging is present but is not a RemoteEvent."
-    end
+    local primary = cutLog.PrimaryPart or (wood and wood:IsA("BasePart") and wood) or cutLog:FindFirstChildWhichIsA("BasePart", true)
+    if not primary then return false, "The loose log has no BasePart to move." end
+    if not cutLog.PrimaryPart then pcall(function() cutLog.PrimaryPart = primary end) end
 
+    -- Place the log beside the saved position rather than inside the character.
+    local destinationCFrame = destination * CFrame.new(9, 4, 0)
     local ok, err = pcall(function()
-        local destinationCFrame = destination * CFrame.new(0, 4, 0)
-        -- Request drag ownership while the model is still present, then move it
-        -- repeatedly with its physics velocity cleared so it does not roll away.
-        task.spawn(function()
-            for _ = 1, 60 do
-                if not cutLog.Parent then break end
-                dragRemote:FireServer(cutLog)
-                task.wait()
-            end
-        end)
-        task.wait(0.1)
-        for _ = 1, 60 do
-            if not cutLog.Parent then break end
-            local primary = cutLog.PrimaryPart or wood
-            if primary and primary.Parent then
-                primary.AssemblyLinearVelocity = Vector3.zero
-                primary.AssemblyAngularVelocity = Vector3.zero
-            end
-            cutLog:PivotTo(destinationCFrame)
-            task.wait()
+        if ownershipRemote and ownershipRemote:IsA("RemoteEvent") then
+            ownershipRemote:FireServer(primary)
+            task.wait(0.12)
         end
-        if cutLog.Parent then
-            dragRemote:FireServer(cutLog)
-            cutLog:PivotTo(destinationCFrame)
+        -- Do not spam drag requests or repeatedly PivotTo: the old loop could
+        -- inject excessive physics updates and fling the player/log.
+        dragRemote:FireServer(cutLog)
+        task.wait(0.12)
+        if not cutLog.Parent or not primary.Parent then
+            error("The loose log was removed while ownership was requested.")
         end
-        task.wait(0.25)
+        cutLog:PivotTo(destinationCFrame)
+        primary.AssemblyLinearVelocity = Vector3.zero
+        primary.AssemblyAngularVelocity = Vector3.zero
+        task.wait(0.65)
     end)
-    if not ok then return false, "The drag/move operation raised an error: " .. tostring(err) end
-    if not cutLog.Parent then return false, "The server removed the loose log while it was being moved." end
-    local targetPosition = (destination * CFrame.new(0, 4, 0)).Position
+    if not ok then return false, "The single drag request failed: " .. tostring(err) end
+    if not cutLog.Parent then return false, "The server removed the loose log during the move." end
+
     local finalPosition = cutLog:GetPivot().Position
-    if (finalPosition - targetPosition).Magnitude > 35 then
-        return false, "The drag request ran, but the log stayed " .. math.floor((finalPosition - targetPosition).Magnitude) .. " studs from the saved position. The server did not accept the drag/move; you may not have drag ownership."
+    local wantedPosition = destinationCFrame.Position
+    local distance = (finalPosition - wantedPosition).Magnitude
+    if distance > 35 then
+        return false, "The drag was rejected or ownership was unavailable; the log remained " .. math.floor(distance) .. " studs from the target."
     end
-    return true
+    return true, "Log moved to the saved area."
 end
 
 local function bringOneTree(treeClass, originalCFrame)
     local character, humanoid, root = getCharacter()
-    if not root then return false, "Character is not loaded." end
+    if not root then return false, "Your character is not loaded (missing HumanoidRootPart)." end
+    if humanoid.Health <= 0 then return false, "Your character has no health; wait for the respawn before bringing a tree." end
+
+    local startCharacter = character
+    local function restoreCharacter()
+        local currentCharacter, currentHumanoid, currentRoot = getCharacter()
+        -- Never teleport a replacement character after a death/reset.
+        if currentCharacter == startCharacter and currentRoot and currentHumanoid and currentHumanoid.Health > 0 then
+            pcall(function()
+                currentRoot.AssemblyLinearVelocity = Vector3.zero
+                currentRoot.AssemblyAngularVelocity = Vector3.zero
+                currentRoot.CFrame = originalCFrame
+                currentRoot.AssemblyLinearVelocity = Vector3.zero
+                currentRoot.AssemblyAngularVelocity = Vector3.zero
+            end)
+        end
+    end
 
     local tree, treeError = findAvailableTree(treeClass)
-    if not tree then return false, treeError or ("Could not find an available " .. treeClass .. " tree.") end
+    if not tree then return false, treeError or ("No available " .. treeClass .. " tree was found.") end
     local wood = getTreeRootSection(tree)
     local cutEvent = tree:FindFirstChild("CutEvent")
     local interaction = ReplicatedStorage:FindFirstChild("Interaction")
     local proxy = interaction and interaction:FindFirstChild("RemoteProxy")
-    if not wood then return false, "The selected tree has no usable root WoodSection." end
-    if not cutEvent then return false, "The selected tree has no CutEvent instance; the game's tree structure may have changed." end
-    if not proxy then return false, "ReplicatedStorage.Interaction.RemoteProxy is missing; the game's chop remote may have changed." end
-    if not proxy:IsA("RemoteEvent") then return false, "RemoteProxy exists but is not a RemoteEvent, so FireServer cannot be called." end
+    if not wood then return false, "The selected tree has no standing root WoodSection." end
+    if not cutEvent then return false, "The selected tree has no CutEvent; the game may have changed." end
+    if not proxy or not proxy:IsA("RemoteEvent") then
+        return false, "ReplicatedStorage.Interaction.RemoteProxy is missing or is not a RemoteEvent."
+    end
 
     local axe, stats, axeError = getBestAxeForTree(treeClass)
-    if not axe then return false, axeError end
-
+    if not axe then return false, axeError or "No axe capable of chopping this tree was found." end
     local logFolder = Workspace:FindFirstChild("LogModels")
     if not logFolder then return false, "Workspace.LogModels was not found." end
     local baselineLogs = {}
     for _, existingLog in ipairs(logFolder:GetChildren()) do baselineLogs[existingLog] = true end
 
-    local newLog = nil
+    local newLog
     local addedConnection = logFolder.ChildAdded:Connect(function(log)
         task.spawn(function()
             for _ = 1, 20 do
                 if not log or not log.Parent then return end
                 local owner = log:FindFirstChild("Owner")
-                if owner and owner.Value == LocalPlayer and not baselineLogs[log] then
+                if not baselineLogs[log] and owner and owner.Value == LocalPlayer then
                     newLog = log
                     return
                 end
@@ -1147,25 +1223,31 @@ local function bringOneTree(treeClass, originalCFrame)
         return nil
     end
 
-    local tetherConnection
-    local chopOk, chopError = pcall(function()
-        local approach = wood.Position + Vector3.new(5, 3, 0)
-        root.CFrame = CFrame.lookAt(approach, wood.Position)
-        task.wait(0.25)
+    local chopOk, chopError = xpcall(function()
+        local offset = root.Position - wood.Position
+        local horizontal = Vector3.new(offset.X, 0, offset.Z)
+        if horizontal.Magnitude < 0.1 then horizontal = Vector3.new(0, 0, 1) end
+        local approach = wood.Position + horizontal.Unit * 9 + Vector3.new(0, 4, 0)
+        -- One controlled move only. There is deliberately no Heartbeat tether
+        -- or repeated CFrame snap, which can collide with the trunk and fling the character.
+        pcall(function() LocalPlayer:RequestStreamAroundAsync(wood.Position) end)
+        root.AssemblyLinearVelocity = Vector3.zero
+        root.AssemblyAngularVelocity = Vector3.zero
+        character:PivotTo(CFrame.lookAt(approach, wood.Position))
+        task.wait(0.35)
 
-        -- Keep the character in valid chopping range while the server processes
-        -- each swing. This connection is always disconnected after the pcall.
-        tetherConnection = RunService.Heartbeat:Connect(function()
-            if State.stopTree or not tree.Parent or not wood.Parent or not root.Parent then return end
-            if (root.Position - approach).Magnitude > 3 then
-                root.CFrame = CFrame.lookAt(approach, wood.Position)
-            end
-        end)
+        if not root.Parent or humanoid.Health <= 0 then
+            error("Your character died or respawned while approaching the tree; no repeated teleport will be attempted.")
+        end
+        local distance = (root.Position - wood.Position).Magnitude
+        if distance > 24 then
+            error("Could not get within chopping range; character is still " .. math.floor(distance) .. " studs from the tree.")
+        end
 
         local sectionId = 1
         local idValue = wood:FindFirstChild("ID")
         if idValue and tonumber(idValue.Value) then sectionId = tonumber(idValue.Value) end
-        local swingCooldown = math.max(tonumber(stats.SwingCooldown) or 0.25, 0.12)
+        local cooldown = math.max(tonumber(stats.SwingCooldown) or 0.25, 0.16)
         local args = {
             tool = axe,
             height = 0.3,
@@ -1176,40 +1258,48 @@ local function bringOneTree(treeClass, originalCFrame)
             cuttingClass = "Axe",
         }
 
-        local deadline = os.clock() + 35
+        local deadline = os.clock() + 20
         repeat
             if State.stopTree then break end
-            if not tree.Parent then break end
-            if tree:FindFirstChild("RootCut") then break end
-            if not root.Parent then error("Your character root disappeared during the chop.") end
-            if not wood.Parent then break end
-            proxy:FireServer(cutEvent, args)
-            task.wait(swingCooldown)
+            if not root.Parent or humanoid.Health <= 0 then
+                error("Your character died during chopping; the script is stopping instead of snapping you back repeatedly.")
+            end
+            if not tree.Parent or not wood.Parent or tree:FindFirstChild("RootCut") then break end
+            local fireOk, fireErr = pcall(function() proxy:FireServer(cutEvent, args) end)
+            if not fireOk then error("The server chop request raised an error: " .. tostring(fireErr)) end
+            task.wait(cooldown)
             newLog = newLog or findNewOwnedLog()
         until tree:FindFirstChild("RootCut") or newLog or os.clock() >= deadline
+    end, function(err)
+        return debug.traceback(tostring(err), 2)
     end)
-    if tetherConnection then tetherConnection:Disconnect() end
-    addedConnection:Disconnect()
 
-    if not chopOk then return false, "Chop request failed: " .. tostring(chopError) end
-    if State.stopTree then return false, "Stopped by user." end
+    if addedConnection then addedConnection:Disconnect() end
+    -- Always put the character back before trying to move the log, including on
+    -- an exception, stop request, missing log, or server rejection.
+    restoreCharacter()
 
-    local logDeadline = os.clock() + 10
+    if not chopOk then return false, "Chopping failed: " .. tostring(chopError) end
+    if State.stopTree then return false, "Stopped by you. Your character was returned to the saved position." end
+
+    local logDeadline = os.clock() + 8
     while not newLog and os.clock() < logDeadline do
         newLog = findNewOwnedLog()
         task.wait(0.12)
     end
     if not newLog then
         if tree.Parent and not tree:FindFirstChild("RootCut") then
-            return false, "No cut was confirmed after 35 seconds. The server rejected the chop or the axe/tree stats do not match. Check that you have the right axe, the tree is unclaimed, and your character is close enough."
+            return false, "No cut was confirmed after 20 seconds. Check that the axe supports this tree, the tree is unclaimed, and the server accepts the chop remote."
         end
-        return false, "The tree was cut, but no new log owned by you appeared in Workspace.LogModels within 10 seconds. The server may not have replicated the log yet."
+        return false, "The tree appears cut, but no new log owned by you appeared in Workspace.LogModels within 8 seconds."
     end
 
     local moved, moveError = moveLooseLogTo(newLog, originalCFrame)
-    if not moved then return false, "The tree was cut, but moving its log failed: " .. tostring(moveError) end
-    if root.Parent then root.CFrame = originalCFrame end
-    return true, "Brought " .. treeClass .. " back to your saved position."
+    restoreCharacter()
+    if not moved then
+        return false, "The tree was cut, but the log could not be brought back: " .. tostring(moveError)
+    end
+    return true, "Brought " .. treeClass .. " to the saved area."
 end
 
 local treeClassOptions = getTreeClasses()
@@ -1238,6 +1328,7 @@ local function beginBringTree(treeClass)
 
     State.savedCFrame = root.CFrame
     local original = State.savedCFrame
+    local originalCharacter = LocalPlayer.Character
     local requestedAmount = math.clamp(tonumber(State.treeAmount) or 1, 1, 67)
     State.runningTree = true
     State.stopTree = false
@@ -1253,7 +1344,11 @@ local function beginBringTree(treeClass)
                 break
             end
             setBringStatus("Processing " .. index .. "/" .. requestedAmount .. " • " .. treeClass, false)
-            local ok, message = bringOneTree(treeClass, original)
+            local callOk, ok, message = pcall(bringOneTree, treeClass, original)
+            if not callOk then
+                message = "Unexpected Bring Tree error: " .. tostring(ok)
+                ok = false
+            end
             if not ok then
                 failure = tostring(message or "The tree process failed without returning an error message.")
                 break
@@ -1263,8 +1358,16 @@ local function beginBringTree(treeClass)
             task.wait(0.45)
         end
 
-        local _, _, currentRoot = getCharacter()
-        if currentRoot and original then currentRoot.CFrame = original end
+        local currentCharacter, currentHumanoid, currentRoot = getCharacter()
+        if currentCharacter == originalCharacter and currentRoot and currentHumanoid and currentHumanoid.Health > 0 and original then
+            pcall(function()
+                currentRoot.AssemblyLinearVelocity = Vector3.zero
+                currentRoot.AssemblyAngularVelocity = Vector3.zero
+                currentRoot.CFrame = original
+                currentRoot.AssemblyLinearVelocity = Vector3.zero
+                currentRoot.AssemblyAngularVelocity = Vector3.zero
+            end)
+        end
         State.runningTree = false
         State.stopTree = false
 
@@ -1287,7 +1390,7 @@ local function createTreeClassList(options)
     panel.BackgroundColor3 = Color3.fromRGB(18, 22, 34)
     panel.BorderSizePixel = 0
     panel.Parent = BringPage
-    Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 11)
+    Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 17)
     local panelStroke = Instance.new("UIStroke")
     panelStroke.Color = Color3.fromRGB(113, 83, 255)
     panelStroke.Transparency = 0.48
@@ -1333,7 +1436,7 @@ local function createTreeClassList(options)
     search.TextSize = 11
     search.TextColor3 = Color3.fromRGB(238, 242, 255)
     search.Parent = panel
-    Instance.new("UICorner", search).CornerRadius = UDim.new(0, 7)
+    Instance.new("UICorner", search).CornerRadius = UDim.new(0, 12)
     local searchStroke = Instance.new("UIStroke")
     searchStroke.Color = Color3.fromRGB(75, 83, 122)
     searchStroke.Transparency = 0.55
@@ -1376,7 +1479,7 @@ local function createTreeClassList(options)
                 button.Active = true
                 button.Selectable = true
                 button.Parent = list
-                Instance.new("UICorner", button).CornerRadius = UDim.new(0, 7)
+                Instance.new("UICorner", button).CornerRadius = UDim.new(0, 12)
                 local edge = Instance.new("UIStroke")
                 edge.Color = Color3.fromRGB(86, 91, 145)
                 edge.Transparency = 0.62
@@ -1404,7 +1507,7 @@ local function createTreeClassList(options)
                 action.TextColor3 = Color3.fromRGB(255, 255, 255)
                 action.TextSize = 9
                 action.Parent = button
-                Instance.new("UICorner", action).CornerRadius = UDim.new(0, 6)
+                Instance.new("UICorner", action).CornerRadius = UDim.new(0, 10)
 
                 button.MouseEnter:Connect(function()
                     TweenService:Create(button, TweenInfo.new(0.12), {BackgroundColor3 = Color3.fromRGB(39, 43, 67)}):Play()
@@ -1413,6 +1516,8 @@ local function createTreeClassList(options)
                     TweenService:Create(button, TweenInfo.new(0.12), {BackgroundColor3 = Color3.fromRGB(27, 32, 48)}):Play()
                 end)
                 button.Activated:Connect(function()
+                    State.selectedTreeClass = className
+                    State.treeClass = className
                     beginBringTree(className)
                 end)
             end
@@ -1456,6 +1561,13 @@ addButton(BringPage, "Stop Bring Tree", "Stops after the current chop/move check
     setBringStatus("Stop requested — waiting for the current step to finish.", false)
     notify("Stopping Bring Tree", "The job will stop at its next safe check.")
 end, Color3.fromRGB(185, 83, 92))
+addButton(BringPage, "Start Auto Farmer on selected tree", "Uses the selected tree type and the amount setting above. Click a tree row first to select its type; the routine stops on the first server/ownership error.", function()
+    local selected = State.selectedTreeClass
+    if not selected then
+        return notify("Auto Farmer", "Click a tree type in the list first so the farmer knows which tree to use.", 5)
+    end
+    beginBringTree(selected)
+end, Color3.fromRGB(55, 165, 135))
 
 --// Blueprint purchase --------------------------------------------------------
 local STORE_IDS = {
@@ -1499,7 +1611,8 @@ local function findNearestCounter(itemModel)
     return nearest, nearestStore
 end
 
-local function listBlueprintModels()
+local function listBlueprintModels(requestedType)
+    requestedType = requestedType or "Blueprint"
     local shopItems = getShopItemsFolder()
     if not shopItems then return {}, "Workspace.Stores.ShopItems was not found." end
     local list, seen = {}, {}
@@ -1508,14 +1621,14 @@ local function listBlueprintModels()
             local typeValue = model:FindFirstChild("Type")
             local nameValue = model:FindFirstChild("BoxItemName")
             local owner = model:FindFirstChild("Owner")
-            if typeValue and tostring(typeValue.Value) == "Blueprint" and nameValue and owner and owner.Value == nil then
+            if typeValue and tostring(typeValue.Value) == requestedType and nameValue and owner and owner.Value == nil then
                 local counter, store = findNearestCounter(model)
                 if counter and store and STORE_IDS[store.Name] then
                     local name = tostring(nameValue.Value)
                     local key = store.Name .. "::" .. name
                     if not seen[key] then
                         seen[key] = true
-                        table.insert(list, {Name = name, StoreName = store.Name, Model = model})
+                        table.insert(list, {Name = name, StoreName = store.Name, Model = model, Type = requestedType})
                     end
                 end
             end
@@ -1584,7 +1697,7 @@ itemSearch.Font = Enum.Font.Gotham
 itemSearch.TextSize = 11
 itemSearch.TextColor3 = Color3.fromRGB(236, 240, 255)
 itemSearch.Parent = ItemsPage
-Instance.new("UICorner", itemSearch).CornerRadius = UDim.new(0, 8)
+Instance.new("UICorner", itemSearch).CornerRadius = UDim.new(0, 14)
 local itemSearchPadding = Instance.new("UIPadding")
 itemSearchPadding.PaddingLeft = UDim.new(0, 10)
 itemSearchPadding.Parent = itemSearch
@@ -1599,16 +1712,16 @@ itemList.AutomaticCanvasSize = Enum.AutomaticSize.Y
 itemList.CanvasSize = UDim2.new(0, 0, 0, 0)
 itemList.Active = true
 itemList.Parent = ItemsPage
-Instance.new("UICorner", itemList).CornerRadius = UDim.new(0, 9)
+Instance.new("UICorner", itemList).CornerRadius = UDim.new(0, 14)
 local itemLayout = Instance.new("UIListLayout")
 itemLayout.Padding = UDim.new(0, 5)
 itemLayout.SortOrder = Enum.SortOrder.LayoutOrder
 itemLayout.Parent = itemList
 local itemPadding = Instance.new("UIPadding")
-itemPadding.PaddingTop = UDim.new(0, 7)
-itemPadding.PaddingLeft = UDim.new(0, 7)
-itemPadding.PaddingRight = UDim.new(0, 7)
-itemPadding.PaddingBottom = UDim.new(0, 7)
+itemPadding.PaddingTop = UDim.new(0, 12)
+itemPadding.PaddingLeft = UDim.new(0, 12)
+itemPadding.PaddingRight = UDim.new(0, 12)
+itemPadding.PaddingBottom = UDim.new(0, 12)
 itemPadding.Parent = itemList
 local itemStatus = addInfo(ItemsPage, "ITEMS  /  Press Refresh to scan the current server.", 42)
 local function renderItemResults()
@@ -1631,7 +1744,7 @@ local function renderItemResults()
                 row.Text = ""
                 row.Active = true
                 row.Parent = itemList
-                Instance.new("UICorner", row).CornerRadius = UDim.new(0, 7)
+                Instance.new("UICorner", row).CornerRadius = UDim.new(0, 12)
                 local name = Instance.new("TextLabel")
                 name.BackgroundTransparency = 1
                 name.Position = UDim2.new(0, 10, 0, 3)
@@ -1670,6 +1783,229 @@ end
 itemSearch:GetPropertyChangedSignal("Text"):Connect(renderItemResults)
 addButton(ItemsPage, "Refresh item list", "Rescans logs, player models and store stock currently loaded in the server.", renderItemResults)
 renderItemResults()
+
+--// Vehicle utilities -----------------------------------------------------------
+addHeader(VehiclePage, "Vehicles & spawners")
+addInfo(VehiclePage, "Vehicle tools only target vehicles and spawners owned by you. Pink cars are a 1-in-500 Hot Pink roll; rerolling can repeatedly charge the normal in-game respawn cost.", 62)
+
+local vehicleStatus = addInfo(VehiclePage, "VEHICLES  /  Select your own vehicle spawner to use the pink-car finder.", 52)
+local function setVehicleStatus(message, isError)
+    if vehicleStatus and vehicleStatus.Parent then
+        vehicleStatus.Text = "VEHICLES  /  " .. tostring(message)
+        vehicleStatus.TextColor3 = isError and Color3.fromRGB(255, 132, 150) or Color3.fromRGB(120, 236, 190)
+    end
+end
+
+addButton(VehiclePage, "Select my vehicle spawner", "Click this, then click your own orange vehicle spawn button in the world.", function()
+    State.awaitingCarSpawner = true
+    notify("Select spawner", "Click the orange spawn button on a vehicle spawner you own. Press the button again if you want to cancel.", 6)
+    setVehicleStatus("Waiting for you to click your own vehicle spawner...", false)
+end, Color3.fromRGB(90, 130, 240))
+addStepper(VehiclePage, "Maximum pink-car attempts", 10, 1, 50, function(value)
+    State.pinkCarAttempts = value
+end)
+addButton(VehiclePage, "Start Pink Car Getter", "Rerolls your selected spawner up to the attempt limit, stopping when Hot Pink (colour ID 1032) is detected.", function()
+    if State.pinkCarRunning then return notify("Pink Car Getter", "A pink-car search is already running.") end
+    local pad = State.selectedCarSpawner
+    if not pad or not pad.Parent then
+        return notify("Pink Car Getter failed", "Select your own vehicle spawner first.", 6)
+    end
+    local owner = pad:FindFirstChild("Owner", true)
+    if not owner or owner.Value ~= LocalPlayer then
+        return notify("Pink Car Getter blocked", "The selected spawner is not confirmed as yours. Only your own spawner can be used.", 6)
+    end
+    local spawnRemote = pad:FindFirstChild("ButtonRemote_SpawnButton", true)
+    local interaction = ReplicatedStorage:FindFirstChild("Interaction")
+    local proxy = interaction and interaction:FindFirstChild("RemoteProxy")
+    local playerModels = Workspace:FindFirstChild("PlayerModels")
+    if not spawnRemote then return notify("Pink Car Getter failed", "ButtonRemote_SpawnButton was not found inside that spawner.", 6) end
+    if not proxy or not proxy:IsA("RemoteEvent") then return notify("Pink Car Getter failed", "Interaction.RemoteProxy is missing or not a RemoteEvent.", 6) end
+    if not playerModels then return notify("Pink Car Getter failed", "Workspace.PlayerModels was not found.", 6) end
+
+    State.pinkCarRunning = true
+    State.stopPinkCar = false
+    local maxAttempts = math.clamp(tonumber(State.pinkCarAttempts) or 10, 1, 50)
+    setVehicleStatus("Starting; maximum " .. maxAttempts .. " respawn attempt(s).", false)
+    task.spawn(function()
+        local attempts, foundPink = 0, false
+        local failure
+        for attempt = 1, maxAttempts do
+            if State.stopPinkCar then break end
+            if not pad.Parent or not spawnRemote.Parent then
+                failure = "Your selected vehicle spawner disappeared. Select it again."
+                break
+            end
+            local before = {}
+            for _, model in ipairs(playerModels:GetChildren()) do before[model] = true end
+            local fired, fireError = pcall(function() proxy:FireServer(spawnRemote) end)
+            if not fired then
+                failure = "The vehicle spawn request failed: " .. tostring(fireError)
+                break
+            end
+            attempts = attempt
+            setVehicleStatus("Attempt " .. attempt .. "/" .. maxAttempts .. " — waiting for the server to spawn a vehicle...", false)
+
+            local spawnedVehicle
+            local deadline = os.clock() + 6
+            repeat
+                for _, model in ipairs(playerModels:GetChildren()) do
+                    if not before[model] and model:IsA("Model") then
+                        local modelOwner = model:FindFirstChild("Owner")
+                        local typeValue = model:FindFirstChild("Type")
+                        if modelOwner and modelOwner.Value == LocalPlayer and typeValue and tostring(typeValue.Value) == "Vehicle" then
+                            spawnedVehicle = model
+                            break
+                        end
+                    end
+                end
+                if spawnedVehicle then break end
+                task.wait(0.15)
+            until os.clock() >= deadline or State.stopPinkCar
+
+            if State.stopPinkCar then break end
+            if not spawnedVehicle then
+                failure = "No newly spawned vehicle owned by you appeared within 6 seconds. The server may have rejected the respawn or the spawner may be on cooldown."
+                break
+            end
+
+            local settings = spawnedVehicle:FindFirstChild("Settings")
+            local color = settings and settings:FindFirstChild("Color")
+            if not color then
+                failure = "The spawned vehicle has no Settings.Color value, so its colour cannot be checked."
+                break
+            end
+            local colorValue = color.Value
+            local colorText = tostring(colorValue):lower()
+            local isPink = tonumber(tostring(colorValue)) == 1032 or colorText == "hot pink" or string.find(colorText, "hot pink", 1, true) ~= nil
+            if isPink then
+                foundPink = true
+                setVehicleStatus("HOT PINK FOUND after " .. attempts .. " attempt(s)!", false)
+                notify("Pink Car Getter", "Hot Pink vehicle detected after " .. attempts .. " attempt(s)!", 8)
+                break
+            end
+            setVehicleStatus("Attempt " .. attempt .. " was not Hot Pink. Current colour value: " .. tostring(colorValue), false)
+            task.wait(1.25)
+        end
+        State.pinkCarRunning = false
+        State.stopPinkCar = false
+        if foundPink then
+            -- Keep the selected spawner for later use; the vehicle itself remains in the game.
+        elseif failure then
+            setVehicleStatus("Stopped after " .. attempts .. " attempt(s): " .. failure, true)
+            notify("Pink Car Getter stopped", failure, 8)
+        elseif attempts >= maxAttempts then
+            setVehicleStatus("Finished " .. attempts .. " attempt(s); no Hot Pink vehicle was found.", true)
+            notify("Pink Car Getter", "No Hot Pink vehicle after " .. attempts .. " attempt(s).", 7)
+        else
+            setVehicleStatus("Stopped by you after " .. attempts .. " attempt(s).", false)
+            notify("Pink Car Getter", "Stopped. " .. attempts .. " attempt(s) used.", 5)
+        end
+    end)
+end, Color3.fromRGB(230, 92, 164))
+addButton(VehiclePage, "Stop Pink Car Getter", "Stops before the next respawn request. A request already sent cannot be cancelled.", function()
+    if not State.pinkCarRunning then return notify("Pink Car Getter", "No pink-car search is running.") end
+    State.stopPinkCar = true
+    setVehicleStatus("Stop requested — waiting for the current spawn check.", false)
+end, Color3.fromRGB(185, 83, 92))
+
+addButton(VehiclePage, "Teleport near my nearest vehicle", "Moves your character near the closest vehicle owned by you.", function()
+    local models = Workspace:FindFirstChild("PlayerModels")
+    if not models then return notify("Vehicle teleport failed", "Workspace.PlayerModels was not found.") end
+    local _, _, root = getCharacter()
+    if not root then return notify("Vehicle teleport failed", "Your character is not loaded.") end
+    local best, bestDistance
+    for _, model in ipairs(models:GetChildren()) do
+        if model:IsA("Model") then
+            local owner = model:FindFirstChild("Owner")
+            local kind = model:FindFirstChild("Type")
+            if owner and owner.Value == LocalPlayer and kind and tostring(kind.Value) == "Vehicle" then
+                local part = model:FindFirstChild("Main") or model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart", true)
+                if part and part:IsA("BasePart") then
+                    local distance = (part.Position - root.Position).Magnitude
+                    if not bestDistance or distance < bestDistance then best, bestDistance = part, distance end
+                end
+            end
+        end
+    end
+    if not best then return notify("Vehicle teleport failed", "No loaded vehicle owned by you was found.") end
+    setCharacterCFrame(CFrame.lookAt(best.Position + Vector3.new(0, 4, 8), best.Position))
+    notify("Vehicle teleport", "Moved near your closest vehicle.")
+end)
+
+local function applyVehicleSpeed()
+    local character = LocalPlayer.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    local seat = humanoid and humanoid.SeatPart
+    local vehicle = seat and seat:FindFirstAncestorOfClass("Model")
+    local config = vehicle and vehicle:FindFirstChild("Configuration")
+    local maxSpeed = config and config:FindFirstChild("MaxSpeed")
+    local owner = vehicle and vehicle:FindFirstChild("Owner", true)
+    if not maxSpeed or not (maxSpeed:IsA("NumberValue") or maxSpeed:IsA("IntValue")) then
+        return false, "Sit in a vehicle with Configuration.MaxSpeed first."
+    end
+    if not owner or owner.Value ~= LocalPlayer then
+        return false, "The seated vehicle is not confirmed as yours; speed change was blocked."
+    end
+    if State.vehicleSpeedTarget ~= maxSpeed then
+        local oldTarget = State.vehicleSpeedTarget
+        if oldTarget and oldTarget.Parent and State.originalVehicleSpeed ~= nil then
+            pcall(function() oldTarget.Value = State.originalVehicleSpeed end)
+        end
+        State.vehicleSpeedTarget = maxSpeed
+        State.originalVehicleSpeed = maxSpeed.Value
+    end
+    State.vehicleSpeedEnabled = true
+    maxSpeed.Value = State.vehicleSpeed
+    return true
+end
+addStepper(VehiclePage, "Vehicle speed setting", 30, 1, 30, function(value)
+    State.vehicleSpeed = value
+end)
+addButton(VehiclePage, "Apply vehicle speed now", "Applies the speed setting to the vehicle you are currently driving.", function()
+    local ok, message = applyVehicleSpeed()
+    if not ok then return notify("Vehicle speed", message, 5) end
+    notify("Vehicle speed", "Applied " .. State.vehicleSpeed .. " to your current vehicle.")
+end)
+
+addButton(VehiclePage, "Scan available vehicle boxes", "Lists unowned vehicle boxes currently stocked in a supported store.", function()
+    local list, err = listBlueprintModels("Vehicle")
+    if err then return notify("Vehicle scan failed", err) end
+    if #list == 0 then return notify("Vehicle scan", "No unowned vehicle boxes were found in supported stores.", 5) end
+    notify("Vehicle scan", tostring(#list) .. " vehicle box(es) found. See the executor console for the names.", 5)
+    for _, entry in ipairs(list) do
+        print("[LT2 Vehicle Stock] " .. entry.Name .. " (" .. entry.StoreName .. ")")
+    end
+end)
+addButton(VehiclePage, "Auto buy available vehicle boxes", "Purchases stocked vehicle boxes one at a time. This spends in-game money; use Stop to cancel after the current item.", function()
+    if State.runningBlueprints then return notify("Vehicle buyer", "Another store buying session is already running.") end
+    local list, err = listBlueprintModels("Vehicle")
+    if err then return notify("Vehicle buyer failed", err, 6) end
+    if #list == 0 then return notify("Vehicle buyer", "No supported vehicle boxes are currently stocked.", 5) end
+    local _, _, root = getCharacter()
+    if not root then return notify("Vehicle buyer failed", "Your character is not loaded.") end
+    local original = root.CFrame
+    State.runningBlueprints = true
+    State.stopBlueprints = false
+    task.spawn(function()
+        local bought, failed = 0, 0
+        for index, entry in ipairs(list) do
+            if State.stopBlueprints then break end
+            notify("Buying vehicle " .. index .. "/" .. #list, entry.Name, 3)
+            local ok, result = buyOneBlueprint(entry, original)
+            if ok then bought += 1 else failed += 1; notify("Vehicle purchase failed", tostring(result), 6) end
+            task.wait(0.4)
+        end
+        local _, _, finalRoot = getCharacter()
+        if finalRoot then finalRoot.CFrame = original end
+        State.runningBlueprints = false
+        State.stopBlueprints = false
+        notify("Vehicle buying finished", bought .. " purchased • " .. failed .. " failed or unavailable.", 7)
+    end)
+end, Color3.fromRGB(80, 175, 230))
+addButton(VehiclePage, "Stop store buying", "Stops the vehicle/blueprint buyer at the next safe check.", function()
+    State.stopBlueprints = true
+    notify("Store buyer", "Stop requested.")
+end, Color3.fromRGB(185, 83, 92))
 
 --// World / visual controls ----------------------------------------------------
 addHeader(WorldPage, "Client-side environment")
@@ -1770,131 +2106,151 @@ local function buyOneBlueprint(entry, originalCFrame)
                 local nameValue = candidate:FindFirstChild("BoxItemName")
                 local typeValue = candidate:FindFirstChild("Type")
                 local owner = candidate:FindFirstChild("Owner")
-                if nameValue and tostring(nameValue.Value) == entry.Name and typeValue and tostring(typeValue.Value) == "Blueprint" and owner and owner.Value == nil then
+                if nameValue and tostring(nameValue.Value) == entry.Name and typeValue
+                    and tostring(typeValue.Value) == (entry.Type or "Blueprint")
+                    and owner and owner.Value == nil then
                     model = candidate
                     break
                 end
             end
         end
     end
-    if not model then return false, "Blueprint stock for " .. entry.Name .. " is no longer available." end
+    if not model then return false, "Stock for " .. entry.Name .. " is no longer available." end
 
     local counter, store = findNearestCounter(model)
     if not counter or not store then return false, "Could not find the correct store counter for " .. entry.Name .. "." end
-    if store.Name ~= entry.StoreName then return false, "The closest counter changed; skipping to avoid purchasing from the wrong store." end
+    if store.Name ~= entry.StoreName then return false, "The nearest counter changed; skipped to avoid buying from the wrong store." end
 
     local primary = model:FindFirstChild("Main")
     if primary and not primary:IsA("BasePart") then primary = nil end
     primary = primary or model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart", true)
-    if not primary then return false, "Blueprint box " .. entry.Name .. " has no Main/BasePart." end
+    if not primary then return false, "The box has no Main/BasePart to place on the counter." end
     if not model.PrimaryPart then pcall(function() model.PrimaryPart = primary end) end
-    local originalItemCFrame = model:GetPivot()
 
-    local _, _, root = getCharacter()
-    if not root then return false, "Character is not loaded." end
+    local _, humanoid, root = getCharacter()
+    if not root or not humanoid or humanoid.Health <= 0 then return false, "Character is not alive/loaded." end
+    local playerStart = originalCFrame or root.CFrame
+    local startingCharacter = LocalPlayer.Character
+    local itemStart = model:GetPivot()
     local interaction = ReplicatedStorage:FindFirstChild("Interaction")
     local drag = interaction and interaction:FindFirstChild("ClientIsDragging")
     local interact = interaction and interaction:FindFirstChild("ClientInteracted")
-    if not drag then return false, "Interaction.ClientIsDragging was not found." end
+    if not drag or not drag:IsA("RemoteEvent") then return false, "Interaction.ClientIsDragging is missing or is not a RemoteEvent." end
 
-    -- Move to the actual counter for this ShopItems box, repeating the drag
-    -- ownership request while the client updates the model's pivot.
-    root.CFrame = CFrame.new(primary.Position + Vector3.new(5, 2, 5))
-    tryPing()
-    task.wait(0.15)
-    local counterTop = counter.CFrame * CFrame.new(0, counter.Size.Y / 2 + primary.Size.Y / 2, 0)
-    local dragOk, dragErr = pcall(function()
-        for _ = 1, 24 do
-            if State.stopBlueprints then return end
-            drag:FireServer(model)
-            model:PivotTo(counterTop)
-            task.wait()
-        end
-        drag:FireServer(model)
-    end)
-    if not dragOk then return false, "Could not move blueprint box to its counter: " .. tostring(dragErr) end
-    if State.stopBlueprints then return false, "Stopped by user." end
-
-    root.CFrame = counter.CFrame * CFrame.new(0, 3, 5)
-    tryPing()
-    task.wait(0.2)
-
-    -- One server confirmation is sent per item. We deliberately do not spam
-    -- this call because a delayed response could otherwise double-charge.
-    local purchaseOk, purchaseError = triggerStorePurchase(store.Name)
-    if not purchaseOk then
-        pcall(function()
-            if model.Parent then drag:FireServer(model); model:PivotTo(originalItemCFrame); drag:FireServer(model) end
-        end)
-        return false, purchaseError
-    end
-
-    local confirmed = false
-    local deadline = os.clock() + 5
-    while os.clock() < deadline do
-        if State.stopBlueprints then break end
-        if not model.Parent or not model:IsDescendantOf(shopItems) then
-            confirmed = true
-            break
-        end
-        local owner = model:FindFirstChild("Owner")
-        if owner and owner.Value == LocalPlayer then confirmed = true; break end
-        task.wait(0.15)
-    end
-    if not confirmed then
-        if model and model.Parent then
+    local function restorePlayer()
+        local currentCharacter, currentHumanoid, currentRoot = getCharacter()
+        if currentCharacter == startingCharacter and currentRoot and currentHumanoid and currentHumanoid.Health > 0 then
             pcall(function()
-                drag:FireServer(model)
-                model:PivotTo(originalItemCFrame)
-                drag:FireServer(model)
+                currentRoot.AssemblyLinearVelocity = Vector3.zero
+                currentRoot.AssemblyAngularVelocity = Vector3.zero
+                currentRoot.CFrame = playerStart
+                currentRoot.AssemblyLinearVelocity = Vector3.zero
+                currentRoot.AssemblyAngularVelocity = Vector3.zero
             end)
         end
-        if root.Parent then root.CFrame = originalCFrame end
-        return false, "The server did not confirm purchase of " .. entry.Name .. ". Check your cash and the counter."
     end
 
-    -- Some builds re-parent the bought box; others create a separate player box.
-    local purchasedBox = nil
-    local modelOwner = model and model:FindFirstChild("Owner")
-    if model and model.Parent and (not model:IsDescendantOf(shopItems) or (modelOwner and modelOwner.Value == LocalPlayer)) then
-        purchasedBox = model
-    else
-        local playerModels = Workspace:FindFirstChild("PlayerModels")
-        if playerModels then
-            for _, candidate in ipairs(playerModels:GetDescendants()) do
-                if candidate:IsA("Model") then
-                    local owner = candidate:FindFirstChild("Owner")
-                    local purchasedName = candidate:FindFirstChild("PurchasedBoxItemName") or candidate:FindFirstChild("BoxItemName")
-                    if owner and owner.Value == LocalPlayer and purchasedName and tostring(purchasedName.Value) == entry.Name then
-                        purchasedBox = candidate
-                        break
+    local ok, result = xpcall(function()
+        if State.stopBlueprints then error("Stopped by user before starting the purchase.") end
+
+        -- Keep the player's movement to two deliberate placements and the box drag to
+        -- one request. The previous 24-frame drag spam could destabilise physics.
+        root.CFrame = CFrame.new(primary.Position + Vector3.new(5, 3, 5))
+        root.AssemblyLinearVelocity = Vector3.zero
+        root.AssemblyAngularVelocity = Vector3.zero
+        tryPing()
+        task.wait(0.2)
+
+        local counterTop = counter.CFrame * CFrame.new(0, counter.Size.Y / 2 + primary.Size.Y / 2, 0)
+        drag:FireServer(model)
+        task.wait(0.12)
+        if not model.Parent then error("The stock box disappeared before reaching the counter.") end
+        model:PivotTo(counterTop)
+        task.wait(0.35)
+        if State.stopBlueprints then error("Stopped by user before confirming the purchase.") end
+
+        root.CFrame = counter.CFrame * CFrame.new(0, 3, 5)
+        root.AssemblyLinearVelocity = Vector3.zero
+        root.AssemblyAngularVelocity = Vector3.zero
+        tryPing()
+        task.wait(0.2)
+
+        local purchaseOk, purchaseError = triggerStorePurchase(store.Name)
+        if not purchaseOk then error(tostring(purchaseError)) end
+
+        local confirmed = false
+        local deadline = os.clock() + 5
+        while os.clock() < deadline do
+            if State.stopBlueprints then error("Stopped while waiting for server purchase confirmation.") end
+            if not model.Parent or not model:IsDescendantOf(shopItems) then
+                confirmed = true
+                break
+            end
+            local owner = model:FindFirstChild("Owner")
+            if owner and owner.Value == LocalPlayer then confirmed = true; break end
+            task.wait(0.15)
+        end
+        if not confirmed then
+            error("The server did not confirm the purchase. Check your cash and the store counter.")
+        end
+
+        local purchasedBox
+        local modelOwner = model and model:FindFirstChild("Owner")
+        if model and model.Parent and (not model:IsDescendantOf(shopItems) or (modelOwner and modelOwner.Value == LocalPlayer)) then
+            purchasedBox = model
+        else
+            local playerModels = Workspace:FindFirstChild("PlayerModels")
+            if playerModels then
+                for _, candidate in ipairs(playerModels:GetDescendants()) do
+                    if candidate:IsA("Model") then
+                        local owner = candidate:FindFirstChild("Owner")
+                        local purchasedName = candidate:FindFirstChild("PurchasedBoxItemName") or candidate:FindFirstChild("BoxItemName")
+                        if owner and owner.Value == LocalPlayer and purchasedName and tostring(purchasedName.Value) == entry.Name then
+                            purchasedBox = candidate
+                            break
+                        end
                     end
                 end
             end
         end
-    end
 
-    -- Bring the purchased box back and open it where the user started.
-    if purchasedBox and purchasedBox.Parent then
-        pcall(function()
-            drag:FireServer(purchasedBox)
-            purchasedBox:PivotTo(originalCFrame * CFrame.new(0, 3, 0))
-            drag:FireServer(purchasedBox)
-        end)
-        task.wait(0.15)
-        if interact and purchasedBox.Parent then
-            pcall(function() interact:FireServer(purchasedBox, "Open box") end)
-            task.wait(0.25)
-            local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
-            local character, humanoid = getCharacter()
-            if backpack and humanoid then
-                local blueprintTool = backpack:FindFirstChild("BlueprintTool") or (character and character:FindFirstChild("BlueprintTool"))
-                if blueprintTool and blueprintTool:IsA("Tool") then pcall(function() humanoid:EquipTool(blueprintTool) end) end
+        if purchasedBox and purchasedBox.Parent then
+            -- A single drag request; if the server denies it, the purchase is still
+            -- reported as successful instead of trying repeated physics corrections.
+            pcall(function()
+                drag:FireServer(purchasedBox)
+                purchasedBox:PivotTo(playerStart * CFrame.new(0, 3, 0))
+            end)
+            task.wait(0.2)
+            if interact and interact:IsA("RemoteEvent") and purchasedBox.Parent then
+                pcall(function() interact:FireServer(purchasedBox, "Open box") end)
+                task.wait(0.25)
+                local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+                local character, currentHumanoid = getCharacter()
+                if backpack and currentHumanoid then
+                    local tool = backpack:FindFirstChild("BlueprintTool") or (character and character:FindFirstChild("BlueprintTool"))
+                    if tool and tool:IsA("Tool") then pcall(function() currentHumanoid:EquipTool(tool) end) end
+                end
             end
+            return "Purchased " .. entry.Name .. "; attempted to bring/open its box."
         end
+        return "Purchased " .. entry.Name .. "; the server did not expose the purchased box for automatic opening."
+    end, function(err)
+        return debug.traceback(tostring(err), 2)
+    end)
+
+    restorePlayer()
+    if not ok then
+        -- Try to put an unpurchased box back where it started, but never spam the drag remote.
+        if model and model.Parent and model:IsDescendantOf(shopItems) then
+            pcall(function()
+                drag:FireServer(model)
+                model:PivotTo(itemStart)
+            end)
+        end
+        return false, tostring(result)
     end
-    if root.Parent then root.CFrame = originalCFrame end
-    return true, "Purchased " .. entry.Name .. "."
+    return true, tostring(result)
 end
 
 addHeader(BuyPage, "Blueprint store automation")
@@ -1947,6 +2303,74 @@ end, Color3.fromRGB(185, 83, 92))
 
 --// Player controls ------------------------------------------------------------
 addHeader(PlayerPage, "Movement")
+
+local HardDraggerRecords = {}
+local hardDraggerAddedConnection
+local function restoreHardDragger(dragger)
+    local data = HardDraggerRecords[dragger]
+    if not data then return end
+    pcall(function()
+        local bg = dragger:FindFirstChild("BodyGyro")
+        local bp = dragger:FindFirstChild("BodyPosition")
+        if bg and data.BG then
+            bg.P = data.BG.P
+            bg.D = data.BG.D
+            bg.MaxTorque = data.BG.MaxTorque
+        end
+        if bp and data.BP then
+            bp.P = data.BP.P
+            bp.D = data.BP.D
+            bp.MaxForce = data.BP.MaxForce
+        end
+    end)
+    if data.Ancestry then pcall(function() data.Ancestry:Disconnect() end) end
+    HardDraggerRecords[dragger] = nil
+end
+local function applyHardDragger(dragger)
+    if not dragger or HardDraggerRecords[dragger] then return end
+    task.spawn(function()
+        local bg = dragger:WaitForChild("BodyGyro", 5)
+        local bp = dragger:WaitForChild("BodyPosition", 5)
+        if not State.hardDragger or not dragger.Parent or not bg or not bp then return end
+        local record = {
+            BG = {P = bg.P, D = bg.D, MaxTorque = bg.MaxTorque},
+            BP = {P = bp.P, D = bp.D, MaxForce = bp.MaxForce},
+        }
+        HardDraggerRecords[dragger] = record
+        record.Ancestry = dragger.AncestryChanged:Connect(function()
+            if not dragger:IsDescendantOf(Workspace) then restoreHardDragger(dragger) end
+        end)
+        while State.hardDragger and dragger.Parent and bg.Parent and bp.Parent do
+            pcall(function()
+                bp.P = 30000
+                bp.D = 2200
+                bp.MaxForce = Vector3.new(500000, 500000, 500000)
+                bg.MaxTorque = Vector3.new(120, 120, 120)
+                bg.P = 450
+                bg.D = 180
+            end)
+            task.wait(0.1)
+        end
+        restoreHardDragger(dragger)
+    end)
+end
+local function setHardDragger(enabled)
+    State.hardDragger = enabled and true or false
+    if hardDraggerAddedConnection then
+        hardDraggerAddedConnection:Disconnect()
+        hardDraggerAddedConnection = nil
+    end
+    if State.hardDragger then
+        hardDraggerAddedConnection = Workspace.ChildAdded:Connect(function(child)
+            if child.Name == "Dragger" then applyHardDragger(child) end
+        end)
+        local existing = Workspace:FindFirstChild("Dragger")
+        if existing then applyHardDragger(existing) end
+    else
+        for dragger in pairs(HardDraggerRecords) do restoreHardDragger(dragger) end
+    end
+end
+
 local flyToggleGetter
 flyToggleGetter, flyToggleSetter = addToggle(PlayerPage, "Fly (Q to toggle)", false, function(value)
     State.fly = value
@@ -2027,6 +2451,27 @@ addStepper(PlayerPage, "Jump power", 50, 50, 200, function(value)
     local _, humanoid = getCharacter()
     if humanoid then humanoid.UseJumpPower = true; humanoid.JumpPower = value end
 end)
+addToggle(PlayerPage, "Hard Dragger", false, function(value)
+    setHardDragger(value)
+    notify("Hard Dragger", value and "Enhanced drag strength enabled. Original settings restore when disabled." or "Original drag settings restored.")
+end, "Changes the local Dragger BodyPosition/BodyGyro strength and restores the original values when switched off.")
+addToggle(PlayerPage, "Sprint (hold LeftShift)", false, function(value)
+    State.sprintEnabled = value
+    notify("Sprint", value and "Hold LeftShift to sprint." or "Sprint disabled.")
+end, "Temporarily boosts your local WalkSpeed while LeftShift is held.")
+addToggle(PlayerPage, "Ctrl + Click teleport", false, function(value)
+    State.ctrlClickTP = value
+    notify("Ctrl + Click TP", value and "Hold Ctrl and left-click a location to teleport." or "Disabled.")
+end)
+local originalFOV = Workspace.CurrentCamera and Workspace.CurrentCamera.FieldOfView or 70
+addStepper(PlayerPage, "Camera field of view", math.floor(originalFOV), 50, 120, function(value)
+    local camera = Workspace.CurrentCamera
+    if camera then camera.FieldOfView = value end
+end)
+local originalMaxZoom = LocalPlayer.CameraMaxZoomDistance
+addStepper(PlayerPage, "Maximum camera zoom", math.clamp(math.floor(originalMaxZoom), 20, 500), 20, 500, function(value)
+    LocalPlayer.CameraMaxZoomDistance = value
+end)
 
 --// Settings ------------------------------------------------------------------
 addHeader(SettingsPage, "Hub settings")
@@ -2085,6 +2530,127 @@ addToggle(SettingsPage, "RGB animation", true, function(value)
     notify("RGB animation", value and "Animated rainbow accents enabled." or "Rainbow animation paused.")
 end)
 addStepper(SettingsPage, "RGB animation speed", 55, 5, 150, function(value) State.rgbSpeed = value end)
+
+local themePresets = {
+    Pink = Color3.fromRGB(255, 92, 178),
+    Purple = Color3.fromRGB(165, 105, 255),
+    Blue = Color3.fromRGB(82, 145, 255),
+    Cyan = Color3.fromRGB(65, 220, 235),
+    Mint = Color3.fromRGB(75, 220, 170),
+    Orange = Color3.fromRGB(255, 160, 75),
+    Red = Color3.fromRGB(255, 88, 105),
+}
+local function setAccentColor(color)
+    local dark = color:Lerp(Color3.fromRGB(12, 14, 24), 0.28)
+    local light = color:Lerp(Color3.new(1, 1, 1), 0.22)
+    local seq = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, dark),
+        ColorSequenceKeypoint.new(0.5, light),
+        ColorSequenceKeypoint.new(1, dark),
+    })
+    AccentGradient.Color = seq
+    MainStrokeGradient.Color = seq
+    MainStroke.Color = color
+    for _, element in ipairs(ScreenGui:GetDescendants()) do
+        if element:IsA("UIStroke") and element ~= MainStroke then
+            element.Color = color
+        end
+    end
+end
+local function setThemePreset(name)
+    if name == "Rainbow" then
+        local rainbow = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 55, 135)),
+            ColorSequenceKeypoint.new(0.25, Color3.fromRGB(255, 185, 65)),
+            ColorSequenceKeypoint.new(0.5, Color3.fromRGB(70, 235, 190)),
+            ColorSequenceKeypoint.new(0.75, Color3.fromRGB(75, 130, 255)),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB(195, 75, 255)),
+        })
+        AccentGradient.Color = rainbow
+        MainStrokeGradient.Color = rainbow
+        MainStroke.Color = Color3.fromRGB(130, 130, 255)
+        return
+    end
+    local color = themePresets[name]
+    if color then setAccentColor(color) end
+end
+addSelector(SettingsPage, "Accent colour", {"Rainbow", "Pink", "Purple", "Blue", "Cyan", "Mint", "Orange", "Red"}, "Rainbow", setThemePreset)
+
+local hexBox = Instance.new("TextBox")
+hexBox.Name = "CustomAccentHex"
+hexBox.Size = UDim2.new(1, -4, 0, 38)
+hexBox.BackgroundColor3 = Color3.fromRGB(23, 27, 40)
+hexBox.BorderSizePixel = 0
+hexBox.PlaceholderText = "Custom colour hex (example: #FF66CC)"
+hexBox.PlaceholderColor3 = Color3.fromRGB(135, 145, 165)
+hexBox.Text = ""
+hexBox.ClearTextOnFocus = false
+hexBox.Font = Enum.Font.Gotham
+hexBox.TextSize = 11
+hexBox.TextColor3 = Color3.fromRGB(240, 243, 255)
+hexBox.Parent = SettingsPage
+Instance.new("UICorner", hexBox).CornerRadius = UDim.new(0, 14)
+local hexPad = Instance.new("UIPadding")
+hexPad.PaddingLeft = UDim.new(0, 12)
+hexPad.Parent = hexBox
+addButton(SettingsPage, "Apply custom hex colour", "Enter a six-digit RGB hex value above.", function()
+    local hex = string.gsub(hexBox.Text or "", "#", "")
+    if #hex ~= 6 or not string.match(hex, "^%x%x%x%x%x%x$") then
+        return notify("Custom colour", "Enter exactly six hexadecimal characters, such as FF66CC.", 5)
+    end
+    local number = tonumber(hex, 16)
+    if not number then return notify("Custom colour", "That hex value could not be read.") end
+    local r = math.floor(number / 65536) % 256
+    local g = math.floor(number / 256) % 256
+    local b = number % 256
+    setAccentColor(Color3.fromRGB(r, g, b))
+    notify("Custom colour", "Accent colour applied.")
+end)
+
+local oldHubBlur = Lighting:FindFirstChild("LT2HubBackdropBlur")
+if oldHubBlur then oldHubBlur:Destroy() end
+local hubBlur = Instance.new("BlurEffect")
+hubBlur.Name = "LT2HubBackdropBlur"
+hubBlur.Size = 0
+hubBlur.Parent = Lighting
+local baseTransparency = {}
+for _, element in ipairs(ScreenGui:GetDescendants()) do
+    if element:IsA("GuiObject") then
+        baseTransparency[element] = element.BackgroundTransparency
+    end
+end
+baseTransparency[Main] = Main.BackgroundTransparency
+local function setGuiOpacity(percent)
+    local amount = math.clamp(tonumber(percent) or 0, 0, 80) / 100
+    -- Include controls created after the opacity setting itself.
+    for _, element in ipairs(ScreenGui:GetDescendants()) do
+        if element:IsA("GuiObject") and baseTransparency[element] == nil then
+            baseTransparency[element] = element.BackgroundTransparency
+        end
+    end
+    for element, original in pairs(baseTransparency) do
+        if element and element.Parent then
+            element.BackgroundTransparency = math.clamp(original + (1 - original) * amount, 0, 1)
+        end
+    end
+end
+addStepper(SettingsPage, "GUI opacity (%)", 0, 0, 80, setGuiOpacity)
+addStepper(SettingsPage, "Background blur strength", 0, 0, 56, function(value)
+    if hubBlur and hubBlur.Parent then hubBlur.Size = value end
+end)
+addStepper(SettingsPage, "GUI size (%)", 100, 70, 130, function(value)
+    MainScale.Scale = value / 100
+end)
+addInfo(SettingsPage, "The blur control changes the scene blur behind the menu. Higher GUI opacity values make the panel backgrounds more transparent.", 48)
+
+addButton(SettingsPage, "Reset appearance", "Restores the default rainbow theme, solid panels, no blur and 100% size.", function()
+    setThemePreset("Rainbow")
+    setGuiOpacity(0)
+    if hubBlur then hubBlur.Size = 0 end
+    MainScale.Scale = 1
+    notify("Appearance reset", "Default theme, opacity, blur and size restored.")
+end)
+
 addButton(SettingsPage, "Open World controls", "Use the World tab for day/night, shadows, full bright and fog settings.", function()
     local targetPage = Pages.World
     if targetPage then
@@ -2106,12 +2672,63 @@ end, Color3.fromRGB(185, 83, 92))
 --// Runtime listeners ---------------------------------------------------------
 UserInputService.InputBegan:Connect(function(input, processed)
     if processed or UserInputService:GetFocusedTextBox() then return end
+
+    if State.awaitingCarSpawner and input.UserInputType == Enum.UserInputType.MouseButton1 then
+        local mouse = LocalPlayer:GetMouse()
+        local target = mouse and mouse.Target
+        local cursor = target
+        local selectedPad
+        while cursor and cursor ~= Workspace do
+            local spawnButton = cursor:FindFirstChild("ButtonRemote_SpawnButton", true)
+            if spawnButton then
+                selectedPad = cursor
+                break
+            end
+            cursor = cursor.Parent
+        end
+        State.awaitingCarSpawner = false
+        if not selectedPad then
+            setVehicleStatus("No vehicle spawn button was found under the clicked part. Try clicking the orange button itself.", true)
+            notify("Spawner selection failed", "Click the orange spawn button on your own vehicle spawner.", 6)
+        else
+            local owner = selectedPad:FindFirstChild("Owner", true)
+            if owner and owner.Value == LocalPlayer then
+                State.selectedCarSpawner = selectedPad
+                setVehicleStatus("Selected your vehicle spawner: " .. selectedPad:GetFullName(), false)
+                notify("Spawner selected", "Your vehicle spawner is ready for the pink-car finder.", 5)
+            else
+                setVehicleStatus("The clicked spawn pad is not confirmed as yours; it was not selected.", true)
+                notify("Spawner selection blocked", "Select a spawner that is owned by your account.", 6)
+            end
+        end
+        return
+    end
+
+    if input.UserInputType == Enum.UserInputType.MouseButton1 and State.ctrlClickTP and UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
+        local mouse = LocalPlayer:GetMouse()
+        if mouse and mouse.Hit then
+            setCharacterCFrame(CFrame.new(mouse.Hit.Position + Vector3.new(0, 4, 0)))
+        end
+        return
+    end
+
+    if input.KeyCode == Enum.KeyCode.LeftShift and State.sprintEnabled then
+        local _, humanoid = getCharacter()
+        if humanoid then humanoid.WalkSpeed = math.max(State.walkSpeed, 16) * 1.65 end
+    end
     if input.KeyCode == State.guiKey then
         Main.Visible = not Main.Visible
     elseif input.KeyCode == State.flyKey then
         if flyToggleSetter then flyToggleSetter(not State.fly) end
     elseif input.KeyCode == Enum.KeyCode.End then
         unloadHub()
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.KeyCode == Enum.KeyCode.LeftShift and State.sprintEnabled then
+        local _, humanoid = getCharacter()
+        if humanoid then humanoid.WalkSpeed = State.walkSpeed end
     end
 end)
 
@@ -2137,8 +2754,26 @@ RunService.Stepped:Connect(function()
     end
     local _, humanoid = getCharacter()
     if humanoid then
-        if State.walkSpeed and humanoid.WalkSpeed ~= State.walkSpeed then humanoid.WalkSpeed = State.walkSpeed end
+        local sprinting = State.sprintEnabled and UserInputService:IsKeyDown(Enum.KeyCode.LeftShift)
+        local desiredWalk = sprinting and (State.walkSpeed * 1.65) or State.walkSpeed
+        if desiredWalk and humanoid.WalkSpeed ~= desiredWalk then humanoid.WalkSpeed = desiredWalk end
         if State.jumpPower and humanoid.UseJumpPower and humanoid.JumpPower ~= State.jumpPower then humanoid.JumpPower = State.jumpPower end
+        local targetSpeed = State.vehicleSpeedTarget
+        if State.vehicleSpeedEnabled and targetSpeed and targetSpeed.Parent then
+            local vehicleModel = targetSpeed:FindFirstAncestorOfClass("Model")
+            local isInTargetVehicle = vehicleModel and humanoid.SeatPart and humanoid.SeatPart:IsDescendantOf(vehicleModel)
+            local owner = vehicleModel and vehicleModel:FindFirstChild("Owner", true)
+            if owner and owner.Value == LocalPlayer and isInTargetVehicle then
+                targetSpeed.Value = State.vehicleSpeed
+            else
+                if State.originalVehicleSpeed ~= nil then
+                    pcall(function() targetSpeed.Value = State.originalVehicleSpeed end)
+                end
+                State.vehicleSpeedEnabled = false
+                State.vehicleSpeedTarget = nil
+                State.originalVehicleSpeed = nil
+            end
+        end
     end
     if State.alwaysDay then Lighting.ClockTime = 13 end
     if State.alwaysNight then Lighting.ClockTime = 0 end
@@ -2147,10 +2782,23 @@ end)
 unloadHub = function()
     if State.closed then return end
     State.closed = true
+    if windowChangedConnection then pcall(function() windowChangedConnection:Disconnect() end) end
+    State.stopPinkCar = true
+    State.pinkCarRunning = false
+    State.awaitingCarSpawner = false
+    State.hardDragger = false
+    if hardDraggerAddedConnection then pcall(function() hardDraggerAddedConnection:Disconnect() end); hardDraggerAddedConnection = nil end
+    for dragger in pairs(HardDraggerRecords) do restoreHardDragger(dragger) end
     State.fly = false
     State.stopTree = true
     State.stopBlueprints = true
     State.noclip = false
+    State.vehicleSpeedEnabled = false
+    if State.vehicleSpeedTarget and State.vehicleSpeedTarget.Parent and State.originalVehicleSpeed ~= nil then
+        pcall(function() State.vehicleSpeedTarget.Value = State.originalVehicleSpeed end)
+    end
+    State.vehicleSpeedTarget = nil
+    State.originalVehicleSpeed = nil
     if State.cameraSaved then
         local saved = State.cameraSaved
         local camera = Workspace.CurrentCamera
@@ -2181,6 +2829,10 @@ unloadHub = function()
     Lighting.Ambient = originalAmbient
     Lighting.OutdoorAmbient = originalOutdoorAmbient
     Lighting.FogEnd = originalFogEnd
+    LocalPlayer.CameraMaxZoomDistance = originalMaxZoom
+    local camera = Workspace.CurrentCamera
+    if camera then camera.FieldOfView = originalFOV end
+    if hubBlur and hubBlur.Parent then hubBlur:Destroy() end
     restoreSavedVisualEffects()
     if ScreenGui then ScreenGui:Destroy() end
 end
