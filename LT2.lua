@@ -1,5 +1,3 @@
-]]
-
 if game.PlaceId ~= 13822889 then
     warn("LT2 Utility Hub: this script is for Lumber Tycoon 2 only.")
     return
