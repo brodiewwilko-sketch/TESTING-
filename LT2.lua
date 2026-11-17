@@ -238,6 +238,9 @@ Close.Font = Enum.Font.GothamBold
 Close.TextSize = 19
 Close.TextColor3 = Color3.fromRGB(255, 220, 227)
 Close.Parent = Top
+Close.ZIndex = 20
+Close.Active = true
+Close.Selectable = true
 Instance.new("UICorner", Close).CornerRadius = UDim.new(0, 7)
 
 local Sidebar = Instance.new("Frame")
@@ -246,6 +249,7 @@ Sidebar.Size = UDim2.new(0, 155, 1, -54)
 Sidebar.BackgroundColor3 = Color3.fromRGB(17, 20, 29)
 Sidebar.BorderSizePixel = 0
 Sidebar.Parent = Main
+Sidebar.ZIndex = 5
 local SideLayout = Instance.new("UIListLayout")
 SideLayout.Padding = UDim.new(0, 6)
 SideLayout.SortOrder = Enum.SortOrder.LayoutOrder
@@ -261,6 +265,7 @@ Content.Position = UDim2.new(0, 155, 0, 54)
 Content.Size = UDim2.new(1, -155, 1, -54)
 Content.BackgroundTransparency = 1
 Content.Parent = Main
+Content.ZIndex = 2
 
 local Pages, TabButtons = {}, {}
 local ActiveTab = nil
@@ -299,18 +304,30 @@ local function createPage(name)
     tab.TextSize = 12
     tab.TextColor3 = Color3.fromRGB(160, 169, 188)
     tab.Parent = Sidebar
+    tab.Visible = true
+    tab.Active = true
+    tab.Selectable = true
+    tab.ZIndex = 8
+    tab.LayoutOrder = #TabButtons + 1
     Instance.new("UICorner", tab).CornerRadius = UDim.new(0, 8)
     TabButtons[name] = tab
-    tab.MouseButton1Click:Connect(function()
+
+    local function selectThisPage()
         for pageName, page in pairs(Pages) do
             page.Visible = (pageName == name)
             local button = TabButtons[pageName]
-            button.BackgroundColor3 = (pageName == name) and Color3.fromRGB(46, 56, 83) or Color3.fromRGB(24, 28, 39)
-            button.TextColor3 = (pageName == name) and Color3.fromRGB(245, 247, 255) or Color3.fromRGB(160, 169, 188)
+            if button then
+                button.BackgroundColor3 = (pageName == name) and Color3.fromRGB(46, 56, 83) or Color3.fromRGB(24, 28, 39)
+                button.TextColor3 = (pageName == name) and Color3.fromRGB(245, 247, 255) or Color3.fromRGB(160, 169, 188)
+            end
         end
         ActiveTab = name
-    end)
-    if not ActiveTab then tab:Activate() end
+    end
+
+    -- Bind both input paths; some executor UI layers only forward one of them.
+    tab.Activated:Connect(selectThisPage)
+    tab.MouseButton1Click:Connect(selectThisPage)
+    if not ActiveTab then selectThisPage() end
     return scroll
 end
 
@@ -1493,6 +1510,8 @@ UserInputService.InputBegan:Connect(function(input, processed)
         Main.Visible = not Main.Visible
     elseif input.KeyCode == State.flyKey then
         if flyToggleSetter then flyToggleSetter(not State.fly) end
+    elseif input.KeyCode == Enum.KeyCode.End then
+        unloadHub()
     end
 end)
 
@@ -1524,17 +1543,41 @@ RunService.Stepped:Connect(function()
     if State.alwaysDay then Lighting.ClockTime = 13 end
 end)
 
-Close.MouseButton1Click:Connect(function()
+local function unloadHub()
+    if State.closed then return end
     State.closed = true
     State.fly = false
     State.stopTree = true
     State.stopBlueprints = true
-    if State.cameraSaved then restoreCamera() end
+    State.noclip = false
+    if State.cameraSaved then
+        local saved = State.cameraSaved
+        local camera = Workspace.CurrentCamera
+        if camera then
+            camera.CameraType = saved.CameraType
+            camera.CameraSubject = saved.CameraSubject
+            camera.CFrame = saved.CFrame
+            camera.FieldOfView = saved.FieldOfView
+        end
+        State.cameraSaved = nil
+    end
     for part, canCollide in pairs(State.oldCollisions) do
         if part and part.Parent then pcall(function() part.CanCollide = canCollide end) end
     end
-    ScreenGui:Destroy()
-end)
+    local character = LocalPlayer.Character
+    local root = character and character:FindFirstChild("HumanoidRootPart")
+    if root then
+        local gyro = root:FindFirstChild("LT2HubFlyGyro")
+        local velocity = root:FindFirstChild("LT2HubFlyVelocity")
+        if gyro then gyro:Destroy() end
+        if velocity then velocity:Destroy() end
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+        if humanoid then humanoid.PlatformStand = false end
+    end
+    if ScreenGui then ScreenGui:Destroy() end
+end
+Close.Activated:Connect(unloadHub)
+Close.MouseButton1Click:Connect(unloadHub)
 
 -- Animate the multicolour accent without a separate forever coroutine.
 local rainbowConnection
