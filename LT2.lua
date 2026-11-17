@@ -14,11 +14,14 @@ local LocalPlayer = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
 
 local function getGuiParent()
+    local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
+        or LocalPlayer:WaitForChild("PlayerGui", 10)
+    if playerGui then return playerGui end
     if typeof(gethui) == "function" then
         local ok, result = pcall(gethui)
         if ok and result then return result end
     end
-    return LocalPlayer:WaitForChild("PlayerGui")
+    error("LT2 Hub: PlayerGui and executor UI parent are unavailable.")
 end
 
 local GuiParent = getGuiParent()
@@ -144,6 +147,8 @@ ScreenGui.Name = "LT2UtilityHub"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.IgnoreGuiInset = true
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.DisplayOrder = 999999
+ScreenGui.Enabled = true
 ScreenGui.Parent = GuiParent
 
 local Main = Instance.new("Frame")
@@ -153,6 +158,8 @@ Main.Position = UDim2.new(0.5, 0, 0.5, 0)
 Main.Size = UDim2.new(0, 760, 0, 500)
 Main.BackgroundColor3 = Color3.fromRGB(14, 16, 23)
 Main.BorderSizePixel = 0
+Main.Active = true
+Main.ZIndex = 1
 Main.Parent = ScreenGui
 local MainCorner = Instance.new("UICorner")
 MainCorner.CornerRadius = UDim.new(0, 13)
@@ -167,6 +174,8 @@ Top.Name = "TopBar"
 Top.Size = UDim2.new(1, 0, 0, 54)
 Top.BackgroundColor3 = Color3.fromRGB(19, 22, 32)
 Top.BorderSizePixel = 0
+Top.Active = true
+Top.ZIndex = 10
 Top.Parent = Main
 local TopCorner = Instance.new("UICorner")
 TopCorner.CornerRadius = UDim.new(0, 13)
@@ -225,6 +234,9 @@ Minimize.Font = Enum.Font.GothamBold
 Minimize.TextSize = 16
 Minimize.TextColor3 = Color3.fromRGB(230, 233, 243)
 Minimize.Parent = Top
+Minimize.ZIndex = 30
+Minimize.Active = true
+Minimize.Selectable = true
 Instance.new("UICorner", Minimize).CornerRadius = UDim.new(0, 7)
 
 local Close = Instance.new("TextButton")
@@ -238,7 +250,7 @@ Close.Font = Enum.Font.GothamBold
 Close.TextSize = 19
 Close.TextColor3 = Color3.fromRGB(255, 220, 227)
 Close.Parent = Top
-Close.ZIndex = 20
+Close.ZIndex = 30
 Close.Active = true
 Close.Selectable = true
 Instance.new("UICorner", Close).CornerRadius = UDim.new(0, 7)
@@ -269,6 +281,7 @@ Content.ZIndex = 2
 
 local Pages, TabButtons = {}, {}
 local ActiveTab = nil
+local TabCount = 0
 
 local function createPage(name)
     local scroll = Instance.new("ScrollingFrame")
@@ -281,6 +294,8 @@ local function createPage(name)
     scroll.ScrollBarImageColor3 = Color3.fromRGB(85, 105, 155)
     scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
     scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    scroll.Active = true
+    scroll.ZIndex = 3
     scroll.Visible = false
     scroll.Parent = Content
     local layout = Instance.new("UIListLayout")
@@ -307,8 +322,9 @@ local function createPage(name)
     tab.Visible = true
     tab.Active = true
     tab.Selectable = true
-    tab.ZIndex = 8
-    tab.LayoutOrder = #TabButtons + 1
+    tab.ZIndex = 12
+    TabCount = TabCount + 1
+    tab.LayoutOrder = TabCount
     Instance.new("UICorner", tab).CornerRadius = UDim.new(0, 8)
     TabButtons[name] = tab
 
@@ -324,8 +340,6 @@ local function createPage(name)
         ActiveTab = name
     end
 
-    -- Bind both input paths; some executor UI layers only forward one of them.
-    tab.Activated:Connect(selectThisPage)
     tab.MouseButton1Click:Connect(selectThisPage)
     if not ActiveTab then selectThisPage() end
     return scroll
@@ -623,6 +637,7 @@ UserInputService.InputChanged:Connect(function(input)
 end)
 
 Minimize.MouseButton1Click:Connect(function()
+    if State.closed then return end
     Sidebar.Visible = not Sidebar.Visible
     Content.Visible = Sidebar.Visible
     Main.Size = Sidebar.Visible and UDim2.new(0, 760, 0, 500) or UDim2.new(0, 400, 0, 54)
@@ -1576,7 +1591,6 @@ local function unloadHub()
     end
     if ScreenGui then ScreenGui:Destroy() end
 end
-Close.Activated:Connect(unloadHub)
 Close.MouseButton1Click:Connect(unloadHub)
 
 -- Animate the multicolour accent without a separate forever coroutine.
@@ -1591,6 +1605,10 @@ end)
 
 -- Ensure Home is visible on first load.
 if Pages.Home then
+    ScreenGui.Enabled = true
+    Main.Visible = true
+    Content.Visible = true
+    Sidebar.Visible = true
     Pages.Home.Visible = true
     ActiveTab = "Home"
     if TabButtons.Home then
