@@ -1,69 +1,115 @@
+    button.BackgroundColor3 = Color3.fromRGB(30, 33, 45)
+    button.Text = "   " .. string.upper(tab)
+    button.TextColor3 = Color3.fromRGB(225, 228, 240)
+    button.Font = Enum.Font.GothamBold
+    button.TextSize = 12
+    button.TextXAlignment = Enum.TextXAlignment.Left
+    button.Parent = sidebar
+    corner(button, 8)
 
---========================================================
--- NEXUS HUB - IMPROVED LT2 WAYPOINTS
---========================================================
-
-local locations = {
-    ["Spawn"] = CFrame.new(155, 5, 74),
-    ["Wood R Us"] = CFrame.new(265, 5, 57),
-    ["Land Store"] = CFrame.new(258, 5, -99),
-    ["Link's Logic"] = CFrame.new(4607, 9, -798),
-    ["Cave"] = CFrame.new(3581, -177, 430),
-    ["Volcano"] = CFrame.new(-1585, 625, 1140),
-    ["Swamp"] = CFrame.new(-1209, 138, -801),
-    ["Palm Island"] = CFrame.new(2549, 5, -42),
-    ["Fancy Furnishings"] = CFrame.new(491, 13, -1720),
-    ["Boxed Cars"] = CFrame.new(509, 5, -1463),
-    ["Fine Arts Shop"] = CFrame.new(5207, -156, 719),
-    ["Bob's Shack"] = CFrame.new(260, 10, -2542),
-    ["Dock"] = CFrame.new(1114, 3, -197),
-    ["Bridge"] = CFrame.new(113, 15, -977),
-    ["End Times"] = CFrame.new(113, -204, -951),
-    ["Shrine of Sight"] = CFrame.new(-1600, 205, 919),
-    ["The Den"] = CFrame.new(323, 49, 1930),
-    ["Volcano Win"] = CFrame.new(-1675, 358, 1476),
-    ["Ski Lodge"] = CFrame.new(1244, 66, 2306),
-    ["Strange Man"] = CFrame.new(1061, 20, 1131),
-    ["Frost Tree"] = CFrame.new(1448, 413, 3185),
-    ["SnowGlow Tree"] = CFrame.new(-1105, -6, -894)
-}
-
-local function teleportToLocation(name)
-    local destination = locations[name]
-
-    if not destination then
-        notify("Teleport error", "No waypoint exists for " .. tostring(name))
-        return
-    end
-
-    local character = Player.Character
-    if not character then
-        notify("Teleport error", "Character is not loaded.")
-        return
-    end
-
-    local root = character:FindFirstChild("HumanoidRootPart")
-    if not root then
-        notify("Teleport error", "HumanoidRootPart is missing.")
-        return
-    end
-
-    savedPosition = root.CFrame
-
-    local success, err = pcall(function()
-        character:PivotTo(destination + Vector3.new(0, 5, 0))
+    tabButtons[tab] = button
+    button.MouseButton1Click:Connect(function()
+        showTab(tab)
     end)
+end
 
-    if not success then
-        notify("Teleport error", tostring(err))
+--========================================================
+-- DRAG WINDOW
+--========================================================
+
+local dragging = false
+local dragStart
+local startPosition
+
+top.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        startPosition = main.Position
+    end
+end)
+
+track(UIS.InputChanged:Connect(function(input)
+    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+        local delta = input.Position - dragStart
+        main.Position = UDim2.new(
+            startPosition.X.Scale,
+            startPosition.X.Offset + delta.X,
+            startPosition.Y.Scale,
+            startPosition.Y.Offset + delta.Y
+        )
+    end
+end))
+
+track(UIS.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = false
+    end
+end))
+
+--========================================================
+-- KEY INPUT
+--========================================================
+
+track(UIS.InputBegan:Connect(function(input, processed)
+    if capturingKey then
+        if input.UserInputType == Enum.UserInputType.Keyboard then
+            if capturingKey == "Menu" then
+                MENU_KEY = input.KeyCode
+            elseif capturingKey == "Fly" then
+                FLY_KEY = input.KeyCode
+            end
+            capturingKey = nil
+            notify("Keybind changed", input.KeyCode.Name)
+            showTab("Settings")
+        end
         return
     end
 
-    task.wait(0.35)
+    if processed then return end
 
-    notify(
-        "Waypoint",
-        "Teleport attempted: " .. name ..
-        ". The server may correct the position."
-    )
+    if input.KeyCode == MENU_KEY then
+        main.Visible = not main.Visible
+    elseif input.KeyCode == FLY_KEY then
+        toggleFly()
+    end
+end))
+
+--========================================================
+-- CLEANUP
+--========================================================
+
+local function cleanup()
+    if destroyed then return end
+    destroyed = true
+
+    if flying then stopFly(true) end
+    if freecam then stopFreecam(true) end
+
+    if rgbConnection then
+        rgbConnection:Disconnect()
+        rgbConnection = nil
+    end
+
+    for _, connection in ipairs(connections) do
+        pcall(function() connection:Disconnect() end)
+    end
+
+    clearHighlight()
+    UIS.MouseBehavior = Enum.MouseBehavior.Default
+
+    if gui then gui:Destroy() end
+    _G.LT2NexusCleanup = nil
 end
+
+_G.LT2NexusCleanup = cleanup
+closeButton.MouseButton1Click:Connect(cleanup)
+
+--========================================================
+-- START
+--========================================================
+
+savedPosition = getRoot().CFrame
+showTab("Wood")
+notify("NEXUS HUB", "Loaded. Menu: Right Shift | Fly: Q")
+print("[LT2 Nexus Hub] Loaded successfully.")
