@@ -880,31 +880,57 @@ local function findAvailableTree(treeClass)
     return candidates[1] and candidates[1].Model or nil
 end
 
-local function getSlotOneAxe()
-    local character, humanoid = getCharacter()
-    if not character then return nil, "Your character is not loaded." end
+local function getBestAxeForTree(treeClass)
+    local character = LocalPlayer.Character
     local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
-    if not backpack then return nil, "Your Backpack is missing." end
+    if not character then return nil, nil, "Your character is not loaded." end
 
-    -- Roblox's Backpack child order corresponds to the visible hotbar order in LT2.
-    -- Prefer the first backpack tool, then fall back to the currently equipped tool.
-    local firstTool = nil
-    for _, child in ipairs(backpack:GetChildren()) do
-        if child:IsA("Tool") then firstTool = child break end
+    local candidates, seen = {}, {}
+    local function inspect(container, equipped)
+        if not container then return end
+        for _, tool in ipairs(container:GetChildren()) do
+            if tool:IsA("Tool") and not seen[tool] and tool:FindFirstChild("ToolName") then
+                seen[tool] = true
+                local toolName = tostring(tool.ToolName.Value)
+                local moduleFolder = ReplicatedStorage:FindFirstChild("AxeClasses")
+                local module = moduleFolder and moduleFolder:FindFirstChild("AxeClass_" .. toolName)
+                if module then
+                    local ok, stats = pcall(function() return require(module).new() end)
+                    if ok and type(stats) == "table" then
+                        if stats.SpecialTrees and stats.SpecialTrees[treeClass] then
+                            for key, value in pairs(stats.SpecialTrees[treeClass]) do stats[key] = value end
+                        end
+                        local supportsTree = stats.Damage ~= nil and stats.SwingCooldown ~= nil
+                        if treeClass == "LoneCave" then supportsTree = supportsTree and toolName == "EndTimesAxe" end
+                        if supportsTree then
+                            table.insert(candidates, {Tool = tool, Stats = stats, Damage = tonumber(stats.Damage) or 0, Equipped = equipped})
+                        end
+                    end
+                end
+            end
+        end
     end
-    if not firstTool then firstTool = character:FindFirstChildOfClass("Tool") end
-    if not firstTool then return nil, "No tool is in inventory slot 1." end
-    if not firstTool:FindFirstChild("ToolName") then
-        return nil, "Inventory slot 1 is not an LT2 axe. Put an axe in slot 1 and try again."
+    inspect(character, true)
+    inspect(backpack, false)
+    table.sort(candidates, function(a, b)
+        if a.Equipped ~= b.Equipped then return a.Equipped end
+        return a.Damage > b.Damage
+    end)
+    local best = candidates[1]
+    if not best then
+        if treeClass == "LoneCave" then
+            return nil, nil, "No suitable End Times Axe was found. Put it in your inventory first."
+        end
+        return nil, nil, "No usable LT2 axe was found in your character or Backpack."
     end
-    if firstTool.Parent ~= character then
-        humanoid:EquipTool(firstTool)
-        task.wait(0.2)
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if best.Tool.Parent ~= character then
+        if not humanoid then return nil, nil, "Your Humanoid is missing, so the axe cannot be equipped." end
+        humanoid:EquipTool(best.Tool)
+        task.wait(0.25)
     end
-    if firstTool.Parent ~= character then
-        return nil, "Could not equip the axe from slot 1."
-    end
-    return firstTool
+    if best.Tool.Parent ~= character then return nil, nil, "The game did not equip the selected axe." end
+    return best.Tool, best.Stats
 end
 
 local function getAxeStats(axe, treeClass)
@@ -979,102 +1005,226 @@ end
 local function bringOneTree(treeClass, originalCFrame)
     local character, humanoid, root = getCharacter()
     if not root then return false, "Character is not loaded." end
-    local axe, axeError = getSlotOneAxe()
-    if not axe then return false, axeError end
-    local stats, statsError = getAxeStats(axe, treeClass)
-    if not stats then return false, statsError end
-    if treeClass == "LoneCave" and tostring(axe.ToolName.Value) ~= "EndTimesAxe" then
-        return false, "Lone Cave / Phantom Wood requires the End Times Axe in slot 1."
-    end
 
     local tree = findAvailableTree(treeClass)
-    if not tree then return false, "No unowned " .. treeClass .. " tree is available in this server." end
+    if not tree then
+        return false, "No unowned " .. treeClass .. " tree is currently available in this server. Try Refresh tree types or another server."
+    end
     local wood = getTreeRootSection(tree)
     local cutEvent = tree:FindFirstChild("CutEvent")
     local interaction = ReplicatedStorage:FindFirstChild("Interaction")
     local proxy = interaction and interaction:FindFirstChild("RemoteProxy")
     if not wood or not cutEvent or not proxy then
-        return false, "Tree is missing WoodSection/CutEvent or Interaction.RemoteProxy."
+        return false, "Tree is missing its root WoodSection, CutEvent, or ReplicatedStorage.Interaction.RemoteProxy."
     end
+
+    local axe, stats, axeError = getBestAxeForTree(treeClass)
+    if not axe then return false, axeError end
 
     local logFolder = Workspace:FindFirstChild("LogModels")
     if not logFolder then return false, "Workspace.LogModels was not found." end
-    local bornAt = os.clock()
     local baselineLogs = {}
     for _, existingLog in ipairs(logFolder:GetChildren()) do baselineLogs[existingLog] = true end
+
     local newLog = nil
     local addedConnection = logFolder.ChildAdded:Connect(function(log)
-        task.defer(function()
-            task.wait(0.12)
-            if not log or not log.Parent then return end
-            local owner = log:FindFirstChild("Owner")
-            if owner and owner.Value == LocalPlayer and not baselineLogs[log] then
-                newLog = log
-                pcall(function() log:SetAttribute("LT2HubBornAt", bornAt) end)
+        task.spawn(function()
+            for _ = 1, 20 do
+                if not log or not log.Parent then return end
+                local owner = log:FindFirstChild("Owner")
+                if owner and owner.Value == LocalPlayer and not baselineLogs[log] then
+                    newLog = log
+                    return
+                end
+                task.wait(0.1)
             end
         end)
     end)
 
-    local cutOk, cutError = pcall(function()
-        local offset = Vector3.new(5, 0, 0)
+    local function findNewOwnedLog()
+        for _, log in ipairs(logFolder:GetChildren()) do
+            if not baselineLogs[log] then
+                local owner = log:FindFirstChild("Owner")
+                if owner and owner.Value == LocalPlayer then return log end
+            end
+        end
+        return nil
+    end
+
+    local chopOk, chopError = pcall(function()
+        local offset = Vector3.new(5, 2, 0)
         root.CFrame = CFrame.new(wood.Position + offset)
-        task.wait(0.25)
+        task.wait(0.35)
+
+        local sectionId = 1
+        local idValue = wood:FindFirstChild("ID")
+        if idValue and tonumber(idValue.Value) then sectionId = tonumber(idValue.Value) end
+        local swingCooldown = math.max(tonumber(stats.SwingCooldown) or 0.25, 0.12)
         local args = {
             tool = axe,
             height = 0.3,
             faceVector = Vector3.new(1, 0, 0),
-            sectionId = 1,
-            hitPoints = stats.Damage,
-            cooldown = stats.SwingCooldown,
+            sectionId = sectionId,
+            hitPoints = tonumber(stats.Damage) or 0.2,
+            cooldown = tonumber(stats.SwingCooldown) or 0,
             cuttingClass = "Axe",
         }
-        local deadline = os.clock() + 30
+
+        local deadline = os.clock() + 35
         repeat
             if State.stopTree then break end
-            if not tree.Parent or tree:FindFirstChild("RootCut") then break end
-            if root.Parent and wood.Parent and (root.Position - wood.Position).Magnitude > 18 then
+            if not tree.Parent then break end
+            if tree:FindFirstChild("RootCut") then break end
+            if not root.Parent then error("Your character root disappeared during the chop.") end
+            if not wood.Parent then break end
+            if (root.Position - wood.Position).Magnitude > 14 then
                 root.CFrame = CFrame.new(wood.Position + offset)
+                task.wait(0.1)
             end
             proxy:FireServer(cutEvent, args)
-            task.wait(math.max(tonumber(stats.SwingCooldown) or 0.35, 0.12))
+            task.wait(swingCooldown)
+            newLog = newLog or findNewOwnedLog()
         until tree:FindFirstChild("RootCut") or newLog or os.clock() >= deadline
     end)
     addedConnection:Disconnect()
-    if not cutOk then return false, "Axe interaction failed: " .. tostring(cutError) end
+
+    if not chopOk then return false, "Chop request failed: " .. tostring(chopError) end
     if State.stopTree then return false, "Stopped by user." end
 
-    local deadline = os.clock() + 8
-    while not newLog and os.clock() < deadline do
-        newLog = findOwnedLooseLog(treeClass, bornAt, baselineLogs)
-        task.wait(0.15)
+    local logDeadline = os.clock() + 10
+    while not newLog and os.clock() < logDeadline do
+        newLog = findNewOwnedLog()
+        task.wait(0.12)
     end
     if not newLog then
         if tree.Parent and not tree:FindFirstChild("RootCut") then
-            return false, "The server did not accept the chop. Check axe type, range and tree ownership."
+            return false, "The server did not accept the chop. Check the axe, tree range, and whether the tree is already claimed."
         end
-        return false, "Tree was cut, but its new loose log was not detected in Workspace.LogModels."
+        return false, "The tree was cut, but its new owned log did not appear in Workspace.LogModels."
     end
 
     local moved, moveError = moveLooseLogTo(newLog, originalCFrame)
-    if not moved then return false, "Tree was cut but could not be brought back: " .. tostring(moveError) end
+    if not moved then return false, "The tree was cut, but moving its log failed: " .. tostring(moveError) end
     if root.Parent then root.CFrame = originalCFrame end
     return true, "Brought " .. treeClass .. " back to your saved position."
 end
 
 local treeClassOptions = getTreeClasses()
-local readTreeClass, updateTreeClassSelector = addSelector(BringPage, "Tree type (all known + live server types)", treeClassOptions, State.treeClass, function(value)
-    State.treeClass = value
-end)
+local treeListRefresh
+local function createTreeClassList(options)
+    local panel = Instance.new("Frame")
+    panel.Name = "TreeClassListPanel"
+    panel.Size = UDim2.new(1, -4, 0, 270)
+    panel.BackgroundColor3 = Color3.fromRGB(22, 26, 37)
+    panel.BorderSizePixel = 0
+    panel.Parent = BringPage
+    Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 8)
+
+    local heading = Instance.new("TextLabel")
+    heading.BackgroundTransparency = 1
+    heading.Position = UDim2.new(0, 12, 0, 8)
+    heading.Size = UDim2.new(1, -24, 0, 20)
+    heading.Font = Enum.Font.GothamSemibold
+    heading.Text = "TREE TYPE — SELECT ONE"
+    heading.TextColor3 = Color3.fromRGB(224, 230, 245)
+    heading.TextSize = 11
+    heading.TextXAlignment = Enum.TextXAlignment.Left
+    heading.Parent = panel
+
+    local search = Instance.new("TextBox")
+    search.Position = UDim2.new(0, 10, 0, 34)
+    search.Size = UDim2.new(1, -20, 0, 30)
+    search.BackgroundColor3 = Color3.fromRGB(14, 17, 25)
+    search.BorderSizePixel = 0
+    search.PlaceholderText = "Search tree types..."
+    search.PlaceholderColor3 = Color3.fromRGB(120, 130, 150)
+    search.Text = ""
+    search.ClearTextOnFocus = false
+    search.Font = Enum.Font.Gotham
+    search.TextSize = 11
+    search.TextColor3 = Color3.fromRGB(235, 239, 250)
+    search.Parent = panel
+    Instance.new("UICorner", search).CornerRadius = UDim.new(0, 6)
+
+    local list = Instance.new("ScrollingFrame")
+    list.Name = "TreeTypeList"
+    list.Position = UDim2.new(0, 10, 0, 72)
+    list.Size = UDim2.new(1, -20, 1, -82)
+    list.BackgroundTransparency = 1
+    list.BorderSizePixel = 0
+    list.ScrollBarThickness = 4
+    list.ScrollBarImageColor3 = Color3.fromRGB(85, 105, 155)
+    list.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    list.CanvasSize = UDim2.new(0, 0, 0, 0)
+    list.Active = true
+    list.Parent = panel
+
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0, 5)
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Parent = list
+
+    local function render()
+        for _, child in ipairs(list:GetChildren()) do
+            if child:IsA("TextButton") then child:Destroy() end
+        end
+        local filter = string.lower(search.Text or "")
+        local order = 0
+        for _, className in ipairs(options) do
+            if filter == "" or string.find(string.lower(className), filter, 1, true) then
+                order += 1
+                local button = Instance.new("TextButton")
+                button.Name = "Tree_" .. className
+                button.LayoutOrder = order
+                button.Size = UDim2.new(1, -2, 0, 30)
+                button.BackgroundColor3 = (State.treeClass == className) and Color3.fromRGB(57, 83, 145) or Color3.fromRGB(31, 36, 50)
+                button.BorderSizePixel = 0
+                button.Text = className
+                button.Font = Enum.Font.GothamSemibold
+                button.TextSize = 11
+                button.TextColor3 = Color3.fromRGB(235, 239, 250)
+                button.TextXAlignment = Enum.TextXAlignment.Left
+                button.Parent = list
+                Instance.new("UICorner", button).CornerRadius = UDim.new(0, 6)
+                local padding = Instance.new("UIPadding")
+                padding.PaddingLeft = UDim.new(0, 10)
+                padding.Parent = button
+                button.MouseButton1Click:Connect(function()
+                    State.treeClass = className
+                    render()
+                    notify("Tree selected", className)
+                end)
+            end
+        end
+        if order == 0 then
+            local empty = Instance.new("TextLabel")
+            empty.BackgroundTransparency = 1
+            empty.Size = UDim2.new(1, 0, 0, 28)
+            empty.Text = "No matching tree types"
+            empty.Font = Enum.Font.Gotham
+            empty.TextSize = 11
+            empty.TextColor3 = Color3.fromRGB(150, 160, 180)
+            empty.Parent = list
+        end
+    end
+    search:GetPropertyChangedSignal("Text"):Connect(render)
+    render()
+    treeListRefresh = function(newOptions)
+        options = newOptions
+        render()
+    end
+end
+
+createTreeClassList(treeClassOptions)
 addHeader(BringPage, "Automated bring")
-addInfo(BringPage, "Put the axe you want to use in hotbar slot 1. The script saves your current position, chops one tree at a time, then moves each resulting loose tree to that saved position.", 70)
+addInfo(BringPage, "Choose a tree from the vertical list. The script finds a suitable axe in your inventory, chops one tree at a time, then attempts to move the resulting log to your saved position. Server-side game checks can still reject a chop or log move.", 76)
 addStepper(BringPage, "Trees to bring (max 67)", 1, 1, 67, function(value) State.treeAmount = value end)
-addButton(BringPage, "Refresh tree types", "Adds tree classes currently visible in this server to the selector.", function()
-    local current = State.treeClass
+addButton(BringPage, "Refresh tree types", "Rebuilds the list using known types and trees currently streamed in this server.", function()
     treeClassOptions = getTreeClasses()
-    updateTreeClassSelector(treeClassOptions)
-    notify("Tree types refreshed", tostring(#treeClassOptions) .. " types are listed. Some may not have trees in this server.")
+    if treeListRefresh then treeListRefresh(treeClassOptions) end
+    notify("Tree types refreshed", tostring(#treeClassOptions) .. " types are listed. A listed type may not currently be spawned here.")
 end)
-addButton(BringPage, "Bring selected tree(s)", "Save position → equip slot 1 → chop → drag logs back.", function()
+addButton(BringPage, "Bring selected tree(s)", "Save position → equip a suitable axe → chop → bring the new log back.", function()
     if State.runningTree then return notify("Bring Tree", "A tree process is already running.") end
     local _, _, root = getCharacter()
     if not root then return notify("Bring Tree failed", "Your character is not loaded.") end
@@ -1477,8 +1627,8 @@ addInfo(SettingsPage, "RightShift toggles the menu. Q toggles fly. You can close
 addButton(SettingsPage, "Restore camera", "Exit any cave viewer and restore the normal camera.", restoreCamera)
 addButton(SettingsPage, "Refresh tree selector", "Rescan currently visible server tree types.", function()
     treeClassOptions = getTreeClasses()
-    updateTreeClassSelector(treeClassOptions)
-    notify("Tree selector", #treeClassOptions .. " tree classes are known; the server only contains a subset.")
+    if treeListRefresh then treeListRefresh(treeClassOptions) end
+    notify("Tree selector", #treeClassOptions .. " tree classes are listed; only some may be spawned in this server.")
 end)
 addButton(SettingsPage, "Remove fog / visual effects", "Client-side change only; does not affect other players.", function()
     for _, child in ipairs(Lighting:GetChildren()) do
