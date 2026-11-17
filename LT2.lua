@@ -1557,6 +1557,5 @@ if Pages.Home then
         TabButtons.Home.TextColor3 = Color3.fromRGB(245, 247, 255)
     end
 end
-
 notify("LT2 Utility Hub loaded", "RightShift opens/closes the menu. Q toggles fly.", 5)
 print("[LT2 Utility Hub] Loaded successfully.")
